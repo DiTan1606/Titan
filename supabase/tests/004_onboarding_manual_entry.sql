@@ -12,7 +12,8 @@ declare vcb uuid; cash uuid; meal uuid; bal bigint; n int; ids uuid[];
 begin
   select id into vcb from public.wallets where kind = 'bank';
   select id into cash from public.wallets where kind = 'cash';
-  select id into meal from public.categories where name = 'Ăn chính';
+  select id into meal from public.categories where name = 'Ăn uống' and parent_id is null;
+  insert into public.categories (kind, name, parent_id) values ('expense', 'Ăn chính', meal) returning id into meal;
 
   -- Đã có giao dịch tự ghi TRƯỚC khi thiết lập (như biên lai 1.406đ)
   insert into public.transactions (type, amount, wallet_id, status, source) values ('income', 1406, vcb, 'pending', 'sms');

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { matchKeywordRule } from './keyword-rules.ts'
+import { matchKeywordRule, matchRule } from './keyword-rules.ts'
 
 describe('matchKeywordRule', () => {
   it.each([
@@ -34,4 +34,11 @@ describe('matchKeywordRule', () => {
     expect(matchKeywordRule('Bo me gui tien thang 11', 'expense')).toBeNull()
     expect(matchKeywordRule('Luong CT HSV thang 10', 'income')).toBe('Lương')
   })
+})
+
+describe('matchRule – danh mục cấp 1 dự phòng (v1.1)', () => {
+  it('trả kèm danh mục cấp 1', () =>
+    expect(matchRule('Highlands Coffee', 'expense')).toEqual({ category: 'Trà sữa/Cà phê', parent: 'Ăn uống' }))
+  it('Google AI → AI & phần mềm', () =>
+    expect(matchRule('GOOGLE *Google One AI Pro', 'expense')?.category).toBe('AI & phần mềm'))
 })

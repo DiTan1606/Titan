@@ -9,7 +9,7 @@ import {
   type Suggestion,
   suggestFromMemory,
 } from '../_shared/categorize.ts'
-import { matchKeywordRule, RULE_CONFIDENCE } from '../_shared/keyword-rules.ts'
+import { matchRule, RULE_CONFIDENCE } from '../_shared/keyword-rules.ts'
 import { classifyWithClaude } from './ai.ts'
 
 export type SuggestInput = { description: string; keyword: string; amount: number; kind: CategoryKind }
@@ -52,8 +52,11 @@ export async function suggestCategories(
     categories.find((c) => c.name === name && c.kind === kind)?.id ?? null
   inputs.forEach((input, i) => {
     if (results[i].categoryId) return
-    const name = matchKeywordRule(input.description, input.kind)
-    const categoryId = name ? idByName(name, input.kind) : null
+    // Danh mục cấp 2 của luật; người dùng chưa tạo cấp 2 đó thì dùng danh mục cấp 1 (V11-1)
+    const rule = matchRule(input.description, input.kind)
+    const categoryId = rule
+      ? (idByName(rule.category, input.kind) ?? (rule.parent ? idByName(rule.parent, input.kind) : null))
+      : null
     if (categoryId) results[i] = { categoryId, confidence: RULE_CONFIDENCE, alternatives: [], source: 'rule' }
   })
 

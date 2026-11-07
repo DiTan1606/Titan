@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { Landmark, Wallet } from 'lucide-react'
-import { AnimatePresence, motion } from 'motion/react'
+import { motion } from 'motion/react'
 import { useState } from 'react'
 import { MoneyInput } from '../../components/MoneyInput'
 import { supabase } from '../../lib/supabase'
@@ -53,12 +53,12 @@ export function Onboarding() {
         </div>
       </div>
 
-      <AnimatePresence mode="wait">
+      {/* Không dùng AnimatePresence mode="wait": nếu hiệu ứng thoát bị khựng, bước cũ (và ô nhập cũ)
+          sẽ còn hiện trong khi state đã sang bước mới → gõ nhầm vào ô VCB. Bước mới hiện ngay, chỉ trượt vào. */}
         <motion.div
           key={current}
           initial={{ x: 40, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
-          exit={{ x: -40, opacity: 0 }}
           transition={{ duration: 0.2 }}
           className="mt-10 flex flex-col gap-6"
         >
@@ -93,7 +93,6 @@ export function Onboarding() {
             </>
           )}
         </motion.div>
-      </AnimatePresence>
 
       {error && <p className="mt-4 text-sm font-semibold text-red-600">{error}</p>}
 

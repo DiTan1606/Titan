@@ -1,7 +1,7 @@
 import { ArrowLeft, ArrowRight, ArrowUp, PartyPopper } from 'lucide-react'
 import { AnimatePresence, motion, type PanInfo, useAnimationControls, useMotionValue, useTransform } from 'motion/react'
 import { useEffect, useState } from 'react'
-import { CategorySelect } from '../../components/CategorySelect'
+import { CategoryPicker } from '../../components/CategoryPicker'
 import {
   type Category,
   confirmTransaction,
@@ -96,7 +96,7 @@ export function ReviewScreen() {
 
       {current && (
         <>
-          <div className="relative h-[24rem]">
+          <div className="relative h-[27rem]">
             {queue[1] && (
               <div className="card absolute inset-x-4 top-4 h-full origin-top scale-[0.95] bg-ink-50" />
             )}
@@ -112,6 +112,7 @@ export function ReviewScreen() {
                   categories={cats}
                   categoryId={categoryOf(current)}
                   onPick={(id) => setPicked({ ...picked, [current.id]: id })}
+                  onCreated={refresh}
                 />
               </SwipeCard>
             </AnimatePresence>
@@ -145,7 +146,13 @@ export function ReviewScreen() {
   )
 }
 
-function CardBody(props: { txn: Transaction; categories: Category[]; categoryId: string | null; onPick: (id: string | null) => void }) {
+function CardBody(props: {
+  txn: Transaction
+  categories: Category[]
+  categoryId: string | null
+  onPick: (id: string | null) => void
+  onCreated: () => void
+}) {
   const { txn, categories } = props
   const out = isOutflow(txn.type)
   const kind = txn.type === 'income' ? 'income' : 'expense'
@@ -201,7 +208,7 @@ function CardBody(props: { txn: Transaction; categories: Category[]; categoryId:
                 ))}
               </div>
             )}
-            <CategorySelect categories={categories} kind={kind} value={props.categoryId} onChange={props.onPick} full />
+            <CategoryPicker compact categories={categories} kind={kind} value={props.categoryId} onChange={props.onPick} onCreated={props.onCreated} />
           </>
         ) : (
           <p className="rounded-xl bg-ink-50 px-3 py-2.5 text-sm font-semibold text-ink-500">Không tính vào thu chi</p>

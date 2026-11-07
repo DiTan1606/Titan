@@ -1,11 +1,12 @@
 import type { Session } from '@supabase/supabase-js'
 import { useQueryClient } from '@tanstack/react-query'
-import { AnimatePresence, motion } from 'motion/react'
+import { motion } from 'motion/react'
 import { useEffect, useState } from 'react'
 import { HomeScreen } from './features/home/HomeScreen'
 import { Onboarding } from './features/onboarding/Onboarding'
 import { SignIn } from './features/onboarding/SignIn'
 import { QuickEntry } from './features/quick-entry/QuickEntry'
+import { PlanScreen } from './features/plan/PlanScreen'
 import { ReviewScreen } from './features/review/ReviewScreen'
 import { SettingsScreen } from './features/settings/SettingsScreen'
 import { TransactionsScreen } from './features/transactions/TransactionsScreen'
@@ -53,23 +54,26 @@ function SignedIn() {
 
   return (
     <div className="mx-auto min-h-dvh max-w-md">
-      <AnimatePresence mode="wait">
+      {/* Tab mới hiện ngay (không mode="wait") để không bao giờ kẹt ở tab cũ nếu hiệu ứng bị khựng */}
         <motion.main
           key={tab}
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }}
           transition={{ duration: 0.18 }}
           className="px-4 pt-5 pb-[calc(7rem+env(safe-area-inset-bottom))]"
         >
           {tab === 'home' && (
-            <HomeScreen onOpenReview={() => setTab('review')} onOpenTransactions={() => setTab('transactions')} />
+            <HomeScreen
+              onOpenReview={() => setTab('review')}
+              onOpenTransactions={() => setTab('transactions')}
+              onOpenPlan={() => setTab('plan')}
+            />
           )}
-          {tab === 'transactions' && <TransactionsScreen />}
+          {tab === 'transactions' && <TransactionsScreen onOpenReview={() => setTab('review')} />}
           {tab === 'review' && <ReviewScreen />}
+          {tab === 'plan' && <PlanScreen />}
           {tab === 'me' && <SettingsScreen />}
         </motion.main>
-      </AnimatePresence>
 
       <TabBar tab={tab} onTab={setTab} onAdd={() => setAdding(true)} reviewBadge={pending.data} />
 

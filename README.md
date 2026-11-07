@@ -8,10 +8,11 @@
 - 🏷️ **Tự gợi ý danh mục**: ghi nhớ thói quen của bạn theo từng quán → từ điển từ khóa → (tùy chọn) Claude AI
 - 📥 **Duyệt bằng cách vuốt**: phải = đúng · trái = sửa · lên = không phải chi tiêu (chuyển khoản, trả nợ, thu nợ…)
 - ✍️ **Ghi nhanh tiền mặt** bằng một dòng: `bánh mì: 20k; trà sữa: 45k`, lệnh `/hôm qua`, `/ngày 03/11`, `/vcb`, `/thu`, `@Minh` (được trả hộ)
+- 🗓️ **Kế hoạch tháng** (v1.1): khoản cố định tự cấu hình · tiết kiệm trước · **"Hôm nay còn được tiêu"** chia theo kiểu ngày (ở nhà / bình thường / đi ăn sang / tiệc) · hũ dư · ngân sách danh mục · quỹ kiểu MoMo
 - 🔁 Nhận diện **chuyển tiền giữa các tài khoản của chính mình** — không tính vào thu chi
 - 🔔 Thông báo đẩy trên iPhone · 🗑️ Thùng rác 30 ngày · 💸 Chi phí vận hành **0đ**
 
-> **v1.0 – Ghi nhận tự động.** Kế hoạch các bản sau (ngân sách, hũ dư, sổ nợ, thống kê, recap tháng) ở [BRD mục 11](docs/01-dac-ta-nghiep-vu.md#11-danh-sách-tính-năng-và-lộ-trình).
+> **v1.1 – Kế hoạch chi tiêu** ([ghi chú phát hành](docs/releases/v1.1.0.md)). Lộ trình các bản sau ở [docs/07](docs/07-v1.1-ke-hoach-chi-tieu.md) và [BRD mục 11](docs/01-dac-ta-nghiep-vu.md#11-danh-sách-tính-năng-và-lộ-trình).
 
 ## Kiến trúc
 
@@ -55,6 +56,7 @@ flowchart LR
 | 04 | [Kết nối Gmail để tự ghi giao dịch](docs/04-ket-noi-gmail.md) |
 | 05 | [Checklist kiểm thử v1.0](docs/05-kiem-thu-v1.md) |
 | 06 | [Thiết kế giao diện](docs/06-thiet-ke-giao-dien.md) |
+| 07 | [v1.1 – Kế hoạch chi tiêu](docs/07-v1.1-ke-hoach-chi-tieu.md) |
 | — | [Ghi chú phát hành](docs/releases/) |
 
 ## Chạy local
@@ -74,8 +76,8 @@ pnpm functions:serve                                        # (terminal khác) E
 ## Kiểm thử
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test   # TypeScript, lint, 131 unit test
-pnpm test:db                               # 7 file test database: RLS, số dư, ghi nhớ quán, bảo mật
+pnpm typecheck && pnpm lint && pnpm test   # TypeScript, lint, 146 unit test
+pnpm test:db                               # 8 file test database: RLS, số dư, ghi nhớ quán, bảo mật
 pnpm test:ingest                           # 31 kiểm tra tích hợp API nhận email/SMS
 ```
 

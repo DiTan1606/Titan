@@ -1,21 +1,21 @@
-import { House, Inbox, ReceiptText, Plus, UserRound, type LucideIcon } from 'lucide-react'
+import { CalendarRange, House, type LucideIcon, Plus, ReceiptText, UserRound } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 
-export type Tab = 'home' | 'transactions' | 'review' | 'me'
+export type Tab = 'home' | 'transactions' | 'review' | 'plan' | 'me'
 
 const LEFT: { id: Tab; label: string; Icon: LucideIcon }[] = [
   { id: 'home', label: 'Trang chủ', Icon: House },
   { id: 'transactions', label: 'Giao dịch', Icon: ReceiptText },
 ]
 const RIGHT: { id: Tab; label: string; Icon: LucideIcon }[] = [
-  { id: 'review', label: 'Duyệt', Icon: Inbox },
+  { id: 'plan', label: 'Kế hoạch', Icon: CalendarRange },
   { id: 'me', label: 'Tôi', Icon: UserRound },
 ]
 
 /** Thanh tab dưới cùng + nút ➕ Ghi nhanh nổi khối ở giữa. */
 export function TabBar(props: { tab: Tab; onTab: (t: Tab) => void; onAdd: () => void; reviewBadge?: number }) {
   const item = ({ id, label, Icon }: (typeof LEFT)[number]) => {
-    const active = props.tab === id
+    const active = props.tab === id || (id === 'transactions' && props.tab === 'review')
     return (
       <button
         key={id}
@@ -33,7 +33,7 @@ export function TabBar(props: { tab: Tab; onTab: (t: Tab) => void; onAdd: () => 
         <motion.span className="relative" animate={{ scale: active ? 1.1 : 1 }} transition={{ type: 'spring', stiffness: 500 }}>
           <Icon size={24} strokeWidth={active ? 2.5 : 2} />
           <AnimatePresence>
-            {id === 'review' && !!props.reviewBadge && (
+            {id === 'transactions' && !!props.reviewBadge && (
               <motion.span
                 key={props.reviewBadge}
                 initial={{ scale: 0 }}

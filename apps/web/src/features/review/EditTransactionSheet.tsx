@@ -1,6 +1,6 @@
 import { Repeat, Trash2 } from 'lucide-react'
 import { useState } from 'react'
-import { CategorySelect } from '../../components/CategorySelect'
+import { CategoryPicker } from '../../components/CategoryPicker'
 import { MoneyInput } from '../../components/MoneyInput'
 import {
   type Category,
@@ -121,7 +121,7 @@ function EditForm(props: { txn: Transaction; categories: Category[]; onClose: ()
 
       {needsCategory(txn.type) && (
         <Field label="Danh mục">
-          <CategorySelect categories={props.categories} kind={kind} value={categoryId} onChange={setCategoryId} full />
+          <CategoryPicker categories={props.categories} kind={kind} value={categoryId} onChange={setCategoryId} onCreated={refresh} />
         </Field>
       )}
 

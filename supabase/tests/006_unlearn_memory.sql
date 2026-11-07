@@ -12,8 +12,10 @@ declare vcb uuid; ext uuid; meal uuid; salary uuid; drink uuid; t1 uuid; t2 uuid
 begin
   select id into vcb from public.wallets where kind = 'bank';
   select id into ext from public.wallets where kind = 'external';
-  select id into meal from public.categories where name = 'Ăn chính';
-  select id into drink from public.categories where name = 'Trà sữa/Cà phê';
+  select id into meal from public.categories where name = 'Ăn uống' and parent_id is null;
+  insert into public.categories (kind, name, parent_id) values ('expense', 'Ăn chính', meal) returning id into meal;
+  insert into public.categories (kind, name, parent_id)
+    select 'expense', 'Trà sữa/Cà phê', parent_id from public.categories where id = meal returning id into drink;
 
   -- Duyệt nhầm 2 khoản cùng "quán" là Ăn chính → ghi nhớ 2 lần
   insert into public.transactions (type, amount, wallet_id, status, source, merchant)

@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { Button } from '../../ui/Button'
 import { PushTestCard } from '../push/PushTestCard'
 import { AutoSyncCard } from './AutoSyncCard'
+import { CategoriesCard } from './CategoriesCard'
 import { TrashCard } from './TrashCard'
 
 // Tab "Tôi": hồ sơ + thông báo + kết nối Gmail + thùng rác
@@ -20,12 +21,13 @@ export function SettingsScreen() {
         </span>
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight">{name}</h1>
-          <p className="text-sm font-semibold text-ink-500">Titan 1.0</p>
+          <p className="text-sm font-semibold text-ink-500">Titan 1.1</p>
         </div>
       </header>
 
       <PushTestCard />
       <AutoSyncCard />
+      <CategoriesCard />
       <TrashCard />
 
       <Button variant="danger" full icon={<LogOut size={18} />} onClick={() => supabase.auth.signOut()}>

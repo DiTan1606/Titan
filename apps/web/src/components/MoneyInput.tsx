@@ -8,7 +8,11 @@ export function MoneyInput(props: { value: number | null; onChange: (v: number |
         inputMode="numeric"
         autoFocus={props.autoFocus}
         value={props.value === null ? '' : props.value.toLocaleString('vi-VN')}
-        onChange={(e) => props.onChange(parseAmountInput(e.target.value))}
+        onChange={(e) => {
+          const v = parseAmountInput(e.target.value)
+          // Tối đa 12 chữ số (< 1.000 tỷ) — chặn số vô lý do gõ nhầm
+          if (v === null || v < 1e12) props.onChange(v)
+        }}
         className="num w-full bg-transparent text-2xl font-extrabold outline-none placeholder:text-ink-300"
         placeholder="0"
       />

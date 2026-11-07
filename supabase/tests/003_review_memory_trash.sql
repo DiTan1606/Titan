@@ -13,8 +13,10 @@ declare
   vcb uuid; meal uuid; drink uuid; t1 uuid; t2 uuid; t3 uuid; r public.transactions; n int;
 begin
   select id into vcb from public.wallets where kind = 'bank';
-  select id into meal from public.categories where name = 'Ăn chính';
-  select id into drink from public.categories where name = 'Trà sữa/Cà phê';
+  select id into meal from public.categories where name = 'Ăn uống' and parent_id is null;
+  insert into public.categories (kind, name, parent_id) values ('expense', 'Ăn chính', meal) returning id into meal;
+  insert into public.categories (kind, name, parent_id)
+    select 'expense', 'Trà sữa/Cà phê', parent_id from public.categories where id = meal returning id into drink;
 
   insert into public.transactions (type, amount, wallet_id, status, source, merchant)
   values ('expense', 45000, vcb, 'pending', 'sms', 'phuc long') returning id into t1;

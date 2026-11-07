@@ -3,7 +3,7 @@ import { merchantKeyword } from '@shared/sms/vcb.ts'
 import { CalendarDays, CalendarClock, HandCoins, Landmark, PiggyBank, TriangleAlert } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useMemo, useRef, useState } from 'react'
-import { CategorySelect } from '../../components/CategorySelect'
+import { CategoryPicker } from '../../components/CategoryPicker'
 import { useCategories, useRefreshMoney, useWallets } from '../../lib/data'
 import { formatVnd } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
@@ -112,18 +112,20 @@ export function QuickEntry({ onSaved }: { onSaved?: () => void }) {
               initial={{ opacity: 0, x: 24 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="card flex items-center gap-3 p-3"
+              className="card flex flex-col gap-3 p-3"
             >
-              <CategoryIcon category={categories.data?.find((c) => c.id === d.categoryId)} categories={categories.data ?? []} size={40} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-bold">{d.description}</p>
-                <p className="num text-sm text-ink-500">{formatVnd(d.amount)}</p>
+              <div className="flex items-center gap-3">
+                <CategoryIcon category={categories.data?.find((c) => c.id === d.categoryId)} categories={categories.data ?? []} size={40} />
+                <p className="min-w-0 flex-1 truncate font-bold">{d.description}</p>
+                <p className="num font-bold">{formatVnd(d.amount)}</p>
               </div>
-              <CategorySelect
+              <CategoryPicker
+                compact
                 categories={categories.data ?? []}
                 kind={categoryKind}
                 value={d.categoryId}
                 onChange={(id) => setDrafts(drafts.map((x, j) => (j === i ? { ...x, categoryId: id } : x)))}
+                onCreated={refresh}
               />
             </motion.li>
           ))}
