@@ -4,6 +4,13 @@ import { createPortal } from 'react-dom'
 import { useVisualViewport } from '../lib/useVisualViewport'
 
 /** Bảng trượt từ dưới lên kiểu iOS: nảy nhẹ khi mở, kéo xuống / chạm nền tối / Esc để đóng. */
+const PAGE = '#f7f6f2' // ink-50, nền trang
+const DIMMED = '#9f9f9c' // ink-50 phủ 40% ink-900
+
+function setThemeColor(color: string) {
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', color)
+}
+
 export function Sheet(props: { open: boolean; onClose: () => void; title?: string; children: React.ReactNode }) {
   const { open, onClose } = props
   // Bàn phím bật → khung chứa co lại đúng vùng nhìn thấy, bảng trượt nằm ngay trên bàn phím
@@ -22,6 +29,17 @@ export function Sheet(props: { open: boolean; onClose: () => void; title?: strin
     return () => document.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
+  // Bàn phím bật: chiều cao phần bàn phím che (iOS không co layout, chỉ co vùng nhìn thấy)
+  const kb = vp ? Math.max(0, window.innerHeight - vp.height - vp.top) : 0
+
+  // V13-17: tô thanh trạng thái (giờ, pin) theo nền tối khi mở bảng và trả lại màu sáng khi đóng.
+  // Không làm vậy thì iOS 26 có lúc giữ màu xám của lớp nền tối sau khi bảng đã đóng.
+  useEffect(() => {
+    if (!open) return
+    setThemeColor(DIMMED)
+    return () => setThemeColor(PAGE)
+  }, [open])
+
   // Portal ra body: cha có transform (hiệu ứng trượt vào) sẽ làm `fixed` bám theo cha thay vì màn hình
   return createPortal(
     <AnimatePresence>
@@ -30,8 +48,7 @@ export function Sheet(props: { open: boolean; onClose: () => void; title?: strin
           className="fixed inset-0 z-50 flex items-end justify-center bg-ink-900/40"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          style={vp ? { top: vp.top, height: vp.height, bottom: 'auto' } : undefined}
+          exit={{ opacity: 0, transition: { duration: 0.15 } }}
           onClick={onClose}
         >
           <motion.div
@@ -39,7 +56,9 @@ export function Sheet(props: { open: boolean; onClose: () => void; title?: strin
             role="dialog"
             aria-label={props.title}
             onClick={(e) => e.stopPropagation()}
-            style={vp ? { maxHeight: vp.height * 0.92 } : undefined}
+            // Bàn phím bật: bảng kéo dài xuống DƯỚI bàn phím (đệm đáy = chiều cao bàn phím) → không hở khoảng trống,
+            // nội dung vẫn nằm ngay trên bàn phím; bàn phím iOS trong suốt nên thấy nền trắng chứ không thấy trang phía sau
+            style={kb > 0 && vp ? { maxHeight: vp.height * 0.92 + kb, paddingBottom: kb + 12 } : undefined}
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}

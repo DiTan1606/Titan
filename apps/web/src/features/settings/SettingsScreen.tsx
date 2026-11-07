@@ -26,7 +26,7 @@ export function SettingsScreen() {
         </span>
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight">{name}</h1>
-          <p className="text-sm font-semibold text-ink-500">Titan 1.3.1</p>
+          <p className="text-sm font-semibold text-ink-500">Titan 1.3.2</p>
         </div>
       </header>
 

@@ -6,7 +6,7 @@ import { formatVnd } from '../lib/format'
 /** Đếm tiền theo tờ: 9 mệnh giá tô màu như tiền thật, mỗi tờ có nút +/− (V12-2) */
 export function BillCounter(props: { counts: BillCounts; onChange: (c: BillCounts) => void }) {
   return (
-    <div className="rounded-[1.5rem] border-2 border-b-4 border-[#5e3a2c] bg-[#7a4a3a] p-3">
+    <div className="rounded-[1.5rem] border-2 border-b-4 border-brand-800 bg-brand-600 p-3">
       <div className="grid grid-cols-3 gap-2">
         {BILLS.map((b) => {
           const n = props.counts[b.value] ?? 0

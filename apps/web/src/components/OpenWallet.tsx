@@ -2,14 +2,15 @@ import { motion } from 'motion/react'
 import { useId } from 'react'
 import { BILLS, type BillCounts } from '../lib/bills'
 
+// Cùng tông xanh ngọc với thẻ VCB (V13-16) cho đồng bộ hai tab
 const LEATHER = {
-  back: '#5A362F',
-  inside: '#3F2420',
-  front: '#8A5444',
-  rim: '#A8705E',
-  stitch: '#D9A88F',
-  tab: '#6E4134',
-  snap: '#E8C9A0',
+  back: '#0B5C48', // brand-700
+  inside: '#04342C', // brand-900
+  front: '#168A66', // brand-500
+  rim: '#1D9E75', // brand-400
+  stitch: '#9FE1CB', // brand-200
+  tab: '#0F6E56', // brand-600
+  snap: '#F6E2A8', // vàng như chip thẻ
 }
 
 /**
@@ -80,10 +81,10 @@ export function OpenWallet({ counts, className }: { counts: BillCounts; classNam
 
       {/* Quai cài nút */}
       <rect x="138" y="114" width="44" height="34" rx="11" fill={LEATHER.tab} />
-      <circle cx="160" cy="133" r="6" fill={LEATHER.snap} stroke="#B98F5E" strokeWidth="2" />
+      <circle cx="160" cy="133" r="6" fill={LEATHER.snap} stroke="#C9A24B" strokeWidth="2" />
 
       {n === 0 && (
-        <text x="160" y="190" textAnchor="middle" fill="#F3D9CF" fontSize="16" fontWeight="800" fontFamily="inherit">
+        <text x="160" y="190" textAnchor="middle" fill="#C2ECDD" fontSize="16" fontWeight="800" fontFamily="inherit">
           Ví trống trơn
         </text>
       )}

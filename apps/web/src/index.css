@@ -70,6 +70,8 @@ body {
   height: 100%;
   overflow: hidden;
   overscroll-behavior: none;
+  /* nền cả canvas (kể cả vùng tai thỏ / thanh trạng thái) luôn sáng như trang */
+  background-color: #f7f6f2;
 }
 
 #root {
@@ -78,6 +80,7 @@ body {
   overflow-y: auto;
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
+  background-color: #f7f6f2;
   /* chừa chỗ cho tai thỏ / thanh home trên iPhone khi chạy dạng PWA */
   padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
 }
