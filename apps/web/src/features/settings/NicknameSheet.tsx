@@ -36,7 +36,6 @@ function Form(props: { current: string | null; onClose: () => void }) {
       }}
     >
       <input
-        autoFocus
         value={name}
         maxLength={24}
         onChange={(e) => setName(e.target.value)}

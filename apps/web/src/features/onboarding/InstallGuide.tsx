@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowDownRight, Ellipsis, Share, SquarePlus, Smartphone } from 'lucide-react'
+import { Ellipsis, Share, SquarePlus, Smartphone } from 'lucide-react'
 import { motion } from 'motion/react'
 import { safariMajor } from '../../lib/platform'
 import { Button } from '../../ui/Button'
@@ -22,7 +22,7 @@ export function InstallGuide({ onSkip }: { onSkip: () => void }) {
     { icon: <Smartphone size={22} />, title: 'Mở Titan từ màn hình chính', hint: 'Đăng nhập và thiết lập ở đó, đóng tab Safari này lại' },
   ]
   return (
-    <main className="mx-auto flex min-h-dvh max-w-sm flex-col px-6 pt-16 pb-10">
+    <main className="mx-auto flex min-h-full max-w-sm flex-col px-6 pt-12 pb-32">
       <motion.img
         src="/icon-192.png"
         alt="Titan"
@@ -54,16 +54,8 @@ export function InstallGuide({ onSkip }: { onSkip: () => void }) {
         ))}
       </ol>
 
-      {/* Mũi tên nhún nhảy chỉ đúng chỗ nút trên thanh Safari */}
-      <motion.div
-        className={`mt-auto flex flex-col text-[#378ADD] ${newSafari ? 'items-end self-end pr-1' : 'items-center self-center'}`}
-        animate={newSafari ? { y: [0, 10, 0], x: [0, 4, 0] } : { y: [0, 10, 0] }}
-        transition={{ duration: 1.2, repeat: Infinity }}
-      >
-        <span className="text-xs font-extrabold">{newSafari ? 'Nút ••• ở góc dưới này' : 'Nút Chia sẻ ở dưới này'}</span>
-        {newSafari ? <ArrowDownRight size={30} strokeWidth={2.8} /> : <ArrowDown size={30} strokeWidth={2.8} />}
-      </motion.div>
-      <Button variant="ghost" full caps={false} onClick={onSkip} className="mt-4">
+      {/* Đặt ngay dưới các bước: thanh dưới của Safari iOS 26 nổi đè lên đáy trang */}
+      <Button variant="ghost" full caps={false} onClick={onSkip} className="mt-6">
         Tiếp tục trên Safari
       </Button>
     </main>

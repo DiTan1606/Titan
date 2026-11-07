@@ -24,15 +24,15 @@ const k = (n: number) => `${Math.round(n / 1000).toLocaleString('vi-VN')}k`
 
 /** Chọn MỘT câu nổi bật nhất theo thứ tự ưu tiên. */
 export function homeMessage(s: HomeStats): string {
-  if (s.pendingCount >= 3) return `${s.pendingCount} khoản đang chờ bạn duyệt. Vuốt vài cái là xong nè`
-  if (s.todayLeft != null && s.todayLeft < 0) return `Lố ${k(-s.todayLeft)} rồi đó. Mai ăn mì gói nha`
-  if (s.drinksThisWeek >= 3) return `Trà sữa lần thứ ${s.drinksThisWeek} tuần này rồi đó nha`
-  if (s.avgDaily > 0 && s.todaySpent > s.avgDaily * 1.5)
-    return `Hôm nay hơi bạo tay rồi đó: ${k(s.todaySpent)}, gấp rưỡi bình thường`
-  if (s.todaySpent === 0 && s.hour >= 18) return 'Cả ngày chưa tiêu đồng nào. Ví đang cảm ơn bạn đó'
+  // Mỗi câu tối đa ~34 ký tự để nằm gọn một dòng trên iPhone
+  if (s.pendingCount >= 3) return `${s.pendingCount} khoản chờ duyệt nè, vuốt lẹ đi`
+  if (s.todayLeft != null && s.todayLeft < 0) return `Lố ${k(-s.todayLeft)} rồi, mai ăn mì gói nha`
+  if (s.drinksThisWeek >= 3) return `Trà sữa ly thứ ${s.drinksThisWeek} tuần này rồi á`
+  if (s.avgDaily > 0 && s.todaySpent > s.avgDaily * 1.5) return `Nay bạo tay ghê, ${k(s.todaySpent)} rồi đó`
+  if (s.todaySpent === 0 && s.hour >= 18) return 'Cả ngày chưa tiêu đồng nào, đỉnh'
   if (s.avgDaily > 0 && s.yesterdaySpent > 0 && s.yesterdaySpent < s.avgDaily)
-    return `Hôm qua tiêu ít hơn bình thường ${k(s.avgDaily - s.yesterdaySpent)}. Giữ phong độ nha`
+    return `Hôm qua bớt được ${k(s.avgDaily - s.yesterdaySpent)}, giữ nha`
   if (s.pendingCount > 0) return `Có ${s.pendingCount} khoản mới chờ duyệt kìa`
-  if (s.todaySpent === 0 && s.hour < 11) return 'Ngày mới, ví mới. Khởi động nhẹ nhàng thôi'
+  if (s.todaySpent === 0 && s.hour < 11) return 'Ngày mới, ví mới, nhẹ nhàng thôi'
   return 'Mọi khoản đều trong tầm kiểm soát'
 }

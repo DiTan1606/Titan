@@ -90,7 +90,7 @@ export function Onboarding() {
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-sm flex-col px-6 pt-6 pb-8">
+    <main className="mx-auto flex min-h-full max-w-sm flex-col px-6 pt-6 pb-8">
       {step !== 'done' && <StepBar step={i + 1} onBack={i > 0 ? back : undefined} />}
 
       {/* Không dùng hiệu ứng thoát: bước mới hiện ngay và trượt vào (bài học v1.1: bước cũ có thể kẹt lại) */}
@@ -123,13 +123,11 @@ export function Onboarding() {
           <Ask
             icon={<Landmark size={30} />}
             title={`Chào ${nickname.trim()}! Số tài khoản VCB của bạn?`}
-            hint="Titan đọc email biên lai VCB trong Gmail của bạn và cần biết đâu là tài khoản của bạn để phân biệt tiền ra, tiền vào. Mở VCB Digibank, chạm vào số tài khoản để sao chép rồi bấm Dán."
+            hint="Để Titan phân biệt tiền ra, tiền vào trong biên lai VCB."
           >
             <AccountNumberInput value={account} onChange={setAccount} autoFocus />
-            <p className="-mt-3 text-xs font-semibold text-ink-400">
-              Titan không lưu số này, chỉ lưu 4 số cuối và một mã băm một chiều để so khớp với biên lai.
-            </p>
             <Next disabled={!valid.account} />
+            <p className="-mt-3 text-xs font-semibold text-ink-400">Titan chỉ lưu 4 số cuối và một mã băm một chiều, không lưu số thật.</p>
           </Ask>
         )}
 
@@ -336,17 +334,18 @@ function Title(props: { title: string; hint: string }) {
 /** Một câu hỏi: icon + tiêu đề + gợi ý, rồi ô nhập và nút ngay bên dưới (không đặt ở đáy màn để bàn phím không che) */
 function Ask(props: { icon: React.ReactNode; title: string; hint: string; children: React.ReactNode }) {
   return (
-    <div className="mt-8 flex flex-col gap-6">
+    // Gọn để ô nhập + nút nằm ở nửa trên màn hình, bàn phím trượt lên không che
+    <div className="mt-5 flex flex-col gap-5">
       <div>
         <motion.span
           initial={{ scale: 0.6, rotate: -10 }}
           animate={{ scale: 1, rotate: 0 }}
           transition={{ type: 'spring', damping: 10, stiffness: 220 }}
-          className="grid size-16 place-items-center rounded-[1.4rem] bg-brand-50 text-brand-500"
+          className="grid size-14 place-items-center rounded-[1.25rem] bg-brand-50 text-brand-500"
         >
           {props.icon}
         </motion.span>
-        <div className="mt-5">
+        <div className="mt-4">
           <Title title={props.title} hint={props.hint} />
         </div>
       </div>

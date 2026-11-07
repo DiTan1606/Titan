@@ -122,7 +122,7 @@ function FundDetail({ fund, onClose }: { fund: Fund; onClose: () => void }) {
           </p>
         )}
       </div>
-      <MoneyInput value={amount} onChange={setAmount} autoFocus />
+      <MoneyInput value={amount} onChange={setAmount} />
       <input
         value={note}
         onChange={(e) => setNote(e.target.value)}
@@ -186,7 +186,6 @@ function NewFundSheet(props: { open: boolean; onClose: () => void }) {
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          autoFocus
           placeholder="MacBook, Du lịch Đà Lạt, Quỹ dự phòng…"
           className="h-12 rounded-2xl border-2 border-ink-100 px-4 text-base font-semibold outline-none placeholder:font-normal placeholder:text-ink-400 focus:border-brand-300"
         />

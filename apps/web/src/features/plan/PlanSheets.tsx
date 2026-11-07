@@ -56,7 +56,7 @@ export function MonthPlanSheet(props: {
     <Sheet open={props.open} onClose={props.onClose} title={`Kế hoạch ${monthLabel}`}>
       <div className="flex flex-col gap-4">
         <Field label="Thu nhập dự kiến trong tháng" hint="Gia đình gửi + lương nhận ngày 25 tháng trước + các khoản khác">
-          <MoneyInput value={income} onChange={setIncome} autoFocus />
+          <MoneyInput value={income} onChange={setIncome} />
         </Field>
         <Field label="Tiết kiệm trước" hint="Để riêng ngay đầu tháng, trước khi tiêu">
           <MoneyInput value={savings} onChange={setSavings} />
@@ -219,7 +219,7 @@ function BudgetForm(props: { category: Category; current: number | null; onClose
   return (
     <div className="flex flex-col gap-4">
       <Field label="Tối đa mỗi tháng">
-        <MoneyInput value={amount} onChange={setAmount} autoFocus />
+        <MoneyInput value={amount} onChange={setAmount} />
       </Field>
       <div className="flex gap-2">
         {props.current !== null && (

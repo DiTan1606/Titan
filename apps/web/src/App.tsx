@@ -76,22 +76,24 @@ function SignedIn() {
     syncPushSubscription()
   }, [])
 
+  const fixedTab = tab === 'home' || tab === 'transactions'
+
   if (profile.isPending) return <Splash />
   if (profile.isError) return <Splash text={`Lỗi tải dữ liệu: ${profile.error.message}`} />
   if (!profile.data.onboarded_at) return <Onboarding />
 
   return (
-    <div className="mx-auto min-h-dvh max-w-md">
+    <div className={`mx-auto max-w-md ${fixedTab ? 'h-full' : 'min-h-full'}`}>
       {/* Tab mới hiện ngay (không mode="wait") để không bao giờ kẹt ở tab cũ nếu hiệu ứng bị khựng.
-          Trang chủ cố định đúng một màn hình (không cuộn), các tab khác cuộn bình thường. */}
+          Trang chủ và Giao dịch cố định đúng một màn hình (Giao dịch chỉ cuộn danh sách), các tab khác cuộn bình thường. */}
         <motion.main
           key={tab}
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.18 }}
           className={
-            tab === 'home'
-              ? 'flex h-[calc(100dvh-env(safe-area-inset-top))] flex-col overflow-hidden px-4 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))]'
+            fixedTab
+              ? 'flex h-full flex-col overflow-hidden px-4 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))]'
               : 'px-4 pt-5 pb-[calc(5.5rem+env(safe-area-inset-bottom))]'
           }
         >
@@ -125,7 +127,7 @@ function SignedIn() {
 
 function Splash({ text }: { text?: string }) {
   return (
-    <main className="grid min-h-dvh place-items-center px-6 text-center">
+    <main className="grid min-h-full place-items-center px-6 text-center">
       {text ? (
         <p className="text-ink-500">{text}</p>
       ) : (

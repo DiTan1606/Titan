@@ -21,7 +21,7 @@ export function SignIn() {
   ]
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-sm flex-col px-6 pt-6 pb-10">
+    <main className="mx-auto flex min-h-full max-w-sm flex-col px-6 pt-6 pb-10">
       <StepBar step={0} />
       <div className="flex flex-1 flex-col items-center justify-center text-center">
         <motion.img

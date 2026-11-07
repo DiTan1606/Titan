@@ -53,7 +53,9 @@ export function TransactionsScreen() {
   const periodLabel = mode === 'year' ? `Năm ${y}` : mode === 'month' ? `Tháng ${m}/${y}` : anchor === today ? 'Hôm nay' : `${d}/${m}/${y}`
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      {/* Phần đầu cố định: tiêu đề + VCB / Tiền mặt + bộ lọc kỳ; chỉ danh sách bên dưới cuộn */}
+      <div className="flex shrink-0 flex-col gap-3">
       <h1 className="text-3xl font-extrabold tracking-tight">Giao dịch</h1>
 
       <div className="grid grid-cols-2 gap-1 rounded-2xl bg-ink-100 p-1">
@@ -122,7 +124,9 @@ export function TransactionsScreen() {
           </p>
         </div>
       </section>
+      </div>
 
+      <div className="-mx-4 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-4 pb-4">
       {txns.isPending && <p className="py-6 text-center text-ink-400">Đang tải…</p>}
       {txns.isSuccess && groups.length === 0 && <p className="py-10 text-center text-ink-500">Không có giao dịch nào trong {periodLabel.toLowerCase()}.</p>}
 
@@ -139,6 +143,8 @@ export function TransactionsScreen() {
           </ul>
         </section>
       ))}
+
+      </div>
 
       <EditTransactionSheet txn={editing} categories={cats} onClose={() => setEditing(null)} />
     </div>

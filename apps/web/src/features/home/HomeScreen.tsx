@@ -48,7 +48,7 @@ export function HomeScreen(props: { onOpenPlan: () => void; onOpenDigest: () => 
     <div className="flex h-full min-h-0 flex-col gap-3">
       <motion.header {...rise(0)} className="shrink-0">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-bold text-brand-500">Xin chào, {nickname ?? 'bạn'}</p>
+          <p className="text-lg font-extrabold text-brand-500">Xin chào, {nickname ?? 'bạn'}</p>
           {hour >= 18 && (
             <button
               type="button"
@@ -59,7 +59,8 @@ export function HomeScreen(props: { onOpenPlan: () => void; onOpenDigest: () => 
             </button>
           )}
         </div>
-        <h1 className="mt-1 line-clamp-2 text-xl leading-snug font-extrabold tracking-tight text-ink-900">{message}</h1>
+        {/* Câu cà khịa luôn một dòng (câu đã viết ngắn, quá dài thì cắt "…") */}
+        <h1 className="mt-0.5 truncate text-[15px] font-bold text-ink-700">{message}</h1>
       </motion.header>
 
       {plan ? (
@@ -86,7 +87,7 @@ export function HomeScreen(props: { onOpenPlan: () => void; onOpenDigest: () => 
               onClick={props.onOpenPlan}
               className="mt-3 inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-extrabold text-brand-600"
             >
-              <CalendarRange size={16} /> Lập kế hoạch để biết còn được tiêu bao nhiêu
+              <CalendarRange size={16} /> Lập kế hoạch tháng này ngay thôi
             </button>
           )}
         </motion.section>

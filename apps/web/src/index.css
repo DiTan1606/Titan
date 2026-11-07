@@ -61,10 +61,25 @@
   40%, 80% { translate: 8px; }
 }
 
+/*
+ * Khung app cố định như app thật (V13-14): trang không bao giờ cuộn / nảy, chỉ #root cuộn bên trong.
+ * Bàn phím iPhone trượt đè lên trên, không đẩy cả trang lên (xem keyboardLock.ts).
+ */
 html,
-body,
+body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 #root {
-  min-height: 100%;
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  /* chừa chỗ cho tai thỏ / thanh home trên iPhone khi chạy dạng PWA */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
 }
 
 /* Khóa zoom như app thật: chặn chạm đúp để phóng to (pinch chặn ở main.tsx) */
@@ -76,8 +91,6 @@ html {
 body {
   @apply bg-ink-50 font-sans text-ink-900 antialiased;
   -webkit-tap-highlight-color: transparent;
-  /* chừa chỗ cho tai thỏ / thanh home trên iPhone khi chạy dạng PWA */
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
 }
 
 /* Số tiền: chữ số đều chiều rộng để không "nhảy" khi đếm */

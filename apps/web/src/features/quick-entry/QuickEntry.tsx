@@ -204,7 +204,6 @@ export function QuickEntry({ onSaved, wallet: fixedWallet }: { onSaved?: () => v
       <textarea
         ref={inputRef}
         rows={3}
-        autoFocus
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {

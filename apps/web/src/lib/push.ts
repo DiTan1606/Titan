@@ -34,15 +34,10 @@ async function registerSubscription(): Promise<void> {
       applicationServerKey: urlBase64ToUint8Array(vapidKey),
     }))
   const json = subscription.toJSON()
-  const { error } = await supabase.from('push_subscriptions').upsert(
-    {
-      endpoint: subscription.endpoint,
-      p256dh: json.keys?.p256dh ?? '',
-      auth: json.keys?.auth ?? '',
-      user_agent: navigator.userAgent,
-    },
-    { onConflict: 'endpoint' },
-  )
+  // Qua Edge Function: thiết bị từng đăng nhập tài khoản khác thì endpoint đang thuộc tài khoản đó (RLS chặn sửa)
+  const { error } = await supabase.functions.invoke('push-subscribe', {
+    body: { endpoint: subscription.endpoint, p256dh: json.keys?.p256dh ?? '', auth: json.keys?.auth ?? '', user_agent: navigator.userAgent },
+  })
   if (error) throw error
 }
 
