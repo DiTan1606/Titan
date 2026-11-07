@@ -107,23 +107,41 @@ export function parseVcbReceipt(raw: string): ReceiptParseResult {
   }
 }
 
+/**
+ * Tài khoản VCB của người dùng.
+ * `exact`: các số tài khoản (đủ số) trong biên lai đã khớp bản băm số tài khoản người dùng đã nhập (V13-13).
+ * Không có `exact` (mới nhập 4 số cuối) → so 4 số cuối như cũ.
+ */
+export type MyAccount = { suffix: string | null; exact?: Set<string> | null }
+
 export type ReceiptDirection =
   | { status: 'ok'; sign: '+' | '-'; counterpartyName: string; counterpartyAccount: string }
-  | { status: 'unknown'; reason: 'account_suffix_missing' | 'account_not_matched' | 'own_transfer' }
+  | { status: 'unknown'; reason: 'account_suffix_missing' | 'account_not_matched' | 'own_transfer' | 'account_ambiguous' }
 
 /**
- * Tiền ra hay vào: tài khoản của người dùng (so 4 số cuối) nằm ở ô nguồn hay ô người hưởng.
+ * Tiền ra hay vào: tài khoản của người dùng nằm ở ô nguồn hay ô người hưởng.
+ * Đủ số → so chính xác. Chỉ 4 số cuối mà cả 2 ô đều khớp (chuyển cho người trùng 4 số cuối) → không đoán, báo người dùng.
  */
-export function receiptDirection(r: VcbReceipt, accountSuffix: string | null): ReceiptDirection {
-  if (!accountSuffix) return { status: 'unknown', reason: 'account_suffix_missing' }
-  const isDebit = r.debitAccount.endsWith(accountSuffix)
-  const isCredit = r.creditAccount.endsWith(accountSuffix)
-  if (isDebit && isCredit) return { status: 'unknown', reason: 'own_transfer' }
+export function receiptDirection(r: VcbReceipt, account: MyAccount | string | null): ReceiptDirection {
+  const acct: MyAccount = typeof account === 'string' || account === null ? { suffix: account } : account
+  const exact = acct.exact ?? null
+  if (!exact && !acct.suffix) return { status: 'unknown', reason: 'account_suffix_missing' }
+  const mine = (n: string) => (exact ? exact.has(n) : n.endsWith(acct.suffix!))
+  const isDebit = mine(r.debitAccount)
+  const isCredit = mine(r.creditAccount)
+  if (isDebit && isCredit) return { status: 'unknown', reason: exact ? 'own_transfer' : 'account_ambiguous' }
   if (isDebit)
     return { status: 'ok', sign: '-', counterpartyName: r.beneficiaryName, counterpartyAccount: r.creditAccount }
   if (isCredit)
     return { status: 'ok', sign: '+', counterpartyName: r.remitterName, counterpartyAccount: r.debitAccount }
   return { status: 'unknown', reason: 'account_not_matched' }
+}
+
+/** Hai số tài khoản (nguồn, người hưởng) trong biên lai, để băm so với tài khoản người dùng trước khi phân tích */
+export function receiptAccounts(text: string): string[] {
+  if (!isVcbReceipt(text)) return []
+  const r = parseVcbReceipt(text)
+  return r.status === 'parsed' ? [r.data.debitAccount, r.data.creditAccount] : []
 }
 
 function escapeRe(s: string) {

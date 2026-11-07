@@ -437,3 +437,6 @@ verify_jwt = false
 
 [functions.cron-notify]
 verify_jwt = false
+
+[functions.gmail-poll]
+verify_jwt = false

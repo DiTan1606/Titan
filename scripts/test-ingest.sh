@@ -110,6 +110,14 @@ check "tự chuyển giữa tài khoản → transfer" "$(send "$TOKEN" "$R_SELF
 check "tự chuyển: ví đích là Tài khoản khác" "$($DB -c "select w.kind from public.transactions t join public.wallets w on w.id=t.to_wallet_id where t.user_id='$uid' and t.amount=81000")" "external"
 check "không lưu số TK gốc trong email" "$($DB -c "select count(*) from public.sms_messages where user_id='$uid' and body_masked like '%1012344321%'")" "0"
 
+echo "▶ trùng 4 số cuối (V13-13)"
+R_TWIN=$(receipt 10000000904 1012344321 5550004321 'TRAN THI C' '60,000' 'tra tien an trua')
+check "chỉ 4 số cuối, người nhận trùng đuôi → báo nhập đủ số" "$(send "$TOKEN" "$R_TWIN" | head -1)" 'account_ambiguous'
+as_user "select public.set_bank_account('1012344321')" >/dev/null
+$DB -c "delete from public.sms_messages where user_id='$uid' and dedupe_key = encode(sha256(convert_to('vcb-order:10000000904','UTF8')),'hex');" >/dev/null
+check "đủ số tài khoản → phân biệt đúng tiền ra" "$(send "$TOKEN" "$R_TWIN" | head -1)" '"type":"expense"'
+check "người nhận đúng là người trùng đuôi" "$($DB -c "select counterparty from public.transactions where user_id='$uid' and amount=60000")" "TRAN THI C"
+
 echo
 echo "Kết quả: $pass qua, $fail lỗi"
 [ "$fail" -eq 0 ]

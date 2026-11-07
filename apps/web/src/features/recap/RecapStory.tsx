@@ -98,9 +98,8 @@ function buildPages(r: Recap): Page[] {
       bg: '#1D9E75',
       render: () => (
         <>
-          <p className="text-6xl">{r.partial ? '📅' : '🎉'}</p>
           <Big>{r.partial ? `Tháng ${r.month} tới giờ của bạn` : `Tháng ${r.month} của bạn đã kết thúc!`}</Big>
-          <Note>{r.count > 0 ? `${r.count} khoản chi đã được ghi lại. Cùng xem nhé 👉` : 'Chưa có khoản chi nào được ghi trong tháng này.'}</Note>
+          <Note>{r.count > 0 ? `${r.count} khoản chi đã được ghi lại. Cùng xem nhé.` : 'Chưa có khoản chi nào được ghi trong tháng này.'}</Note>
         </>
       ),
     },
@@ -117,7 +116,7 @@ function buildPages(r: Recap): Page[] {
           {r.changePct === null
             ? `Trung bình ${formatVnd(r.avgDaily)} mỗi ngày.`
             : r.changePct <= 0
-              ? `Ít hơn tháng trước ${-r.changePct}% 👏 Trung bình ${formatVnd(r.avgDaily)}/ngày.`
+              ? `Ít hơn tháng trước ${-r.changePct}%. Trung bình ${formatVnd(r.avgDaily)}/ngày.`
               : `Nhiều hơn tháng trước ${r.changePct}%. Trung bình ${formatVnd(r.avgDaily)}/ngày.`}
         </Note>
       </>
@@ -163,7 +162,7 @@ function buildPages(r: Recap): Page[] {
           <Kicker>Chỗ ruột của bạn</Kicker>
           <Big>{p.name}</Big>
           <Note>
-            Ghé {p.visits} lần, tổng {formatVnd(p.amount)} 💜
+            Ghé {p.visits} lần, tổng {formatVnd(p.amount)}
           </Note>
         </>
       ),
@@ -178,7 +177,7 @@ function buildPages(r: Recap): Page[] {
         <>
           <Kicker>Ngày "mạnh tay" nhất</Kicker>
           <Big>{dayLabel(d.date)}</Big>
-          <Note>Hôm đó bạn chi {formatVnd(d.amount)}. Chắc có lý do đặc biệt nhỉ? 😄</Note>
+          <Note>Hôm đó bạn chi {formatVnd(d.amount)}. Chắc có lý do đặc biệt nhỉ?</Note>
         </>
       ),
     })
@@ -189,7 +188,6 @@ function buildPages(r: Recap): Page[] {
       bg: '#993556',
       render: () => (
         <>
-          <p className="text-6xl">🧋</p>
           <Big>{r.drinks} ly</Big>
           <Note>trà sữa, cà phê các kiểu trong tháng. Nước là chân ái mà!</Note>
         </>
@@ -255,7 +253,6 @@ function Finale({ r }: { r: Recap }) {
 
   return (
     <>
-      <p className="text-6xl">✨</p>
       <p className="text-3xl leading-tight font-extrabold">{r.verdict}</p>
       {canSave && (
         <div className="mt-6 flex flex-col gap-2">
@@ -267,7 +264,7 @@ function Finale({ r }: { r: Recap }) {
           ))}
         </div>
       )}
-      {saved && <Note>Đã cất vào quỹ 💚</Note>}
+      {saved && <Note>Đã cất vào quỹ</Note>}
     </>
   )
 }

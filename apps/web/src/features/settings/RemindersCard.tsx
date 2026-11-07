@@ -1,8 +1,6 @@
-import { useQueryClient } from '@tanstack/react-query'
 import { AlarmClock } from 'lucide-react'
 import { notifySettings } from '@shared/notify.ts'
-import { useProfile } from '../../lib/data'
-import { supabase } from '../../lib/supabase'
+import { useProfile, useSaveSettings } from '../../lib/data'
 import { useToast } from '../../ui/toast-context'
 
 const HOURS = [null, 19, 20, 21, 22] as const
@@ -11,24 +9,19 @@ const DAYS = [0, 1, 3, 5] as const
 /** V12-6 · Giờ tổng kết cuối ngày + nhắc khoản cố định trước bao nhiêu ngày (lưu trong profiles.settings) */
 export function RemindersCard() {
   const profile = useProfile()
-  const qc = useQueryClient()
   const toast = useToast()
   const raw = profile.data?.settings ?? {}
   const { digestHour, remindDays } = notifySettings(raw)
 
+  const saveSettings = useSaveSettings()
+
   async function save(patch: Record<string, unknown>) {
-    // Lấy bản mới nhất trong cache + cập nhật ngay, để bấm liên tiếp không ghi đè lựa chọn trước
-    type P = NonNullable<typeof profile.data>
-    const current = qc.getQueryData<P>(['profile'])
-    if (!current) return
-    const settings = { ...current.settings, ...patch }
-    qc.setQueryData<P>(['profile'], { ...current, settings })
-    const { error } = await supabase.from('profiles').update({ settings }).eq('id', current.id)
-    if (error) {
-      toast(error.message, { tone: 'error' })
-      return qc.invalidateQueries({ queryKey: ['profile'] })
+    try {
+      await saveSettings(patch)
+      toast('Đã lưu', { tone: 'success' })
+    } catch (e) {
+      toast((e as Error).message, { tone: 'error' })
     }
-    toast('Đã lưu', { tone: 'success' })
   }
 
   const chip = (active: boolean) =>

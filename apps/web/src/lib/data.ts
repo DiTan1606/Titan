@@ -1,8 +1,9 @@
 // Truy vấn dữ liệu dùng chung (TanStack Query). RLS đảm bảo chỉ thấy dữ liệu của người đăng nhập.
 import { vnDate } from '@shared/quick-entry.ts'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { computePlan, type DayKind, monthDays, monthStart, type Spend } from '@shared/budget.ts'
+import { computePlan, type DayKind, dayKindsConfig, type DayKindsConfig, monthDays, monthStart, type Spend, weightsOf } from '@shared/budget.ts'
 import { buildRecap, type RecapTxn } from '@shared/recap.ts'
+import { type BillCounts, walletBills } from './bills'
 import { supabase } from './supabase'
 
 export type Wallet = {
@@ -39,6 +40,9 @@ export type Transaction = {
   walletId: string | null
   toWalletId: string | null
   merchant: string | null
+  /** null = bình thường; chỉ ghi khi đáng tiền / hối hận */
+  mood: 'worth' | 'regret' | null
+  note: string | null
 }
 
 const throwIf = <T>(r: { data: T; error: { message: string } | null }): T => {
@@ -117,7 +121,7 @@ export function todayRange(now = new Date()) {
 }
 
 const TXN_COLUMNS =
-  'id, type, amount, occurred_at, description, counterparty, status, source, category_id, ai_confidence, ai_alternatives, wallet_id, to_wallet_id, merchant'
+  'id, type, amount, occurred_at, description, counterparty, status, source, category_id, ai_confidence, ai_alternatives, wallet_id, to_wallet_id, merchant, mood, note'
 
 function mapTxn(t: Record<string, unknown>): Transaction {
   return {
@@ -135,6 +139,8 @@ function mapTxn(t: Record<string, unknown>): Transaction {
     walletId: t.wallet_id as string | null,
     toWalletId: t.to_wallet_id as string | null,
     merchant: t.merchant as string | null,
+    mood: t.mood === 'worth' || t.mood === 'regret' ? t.mood : null,
+    note: t.note as string | null,
   }
 }
 
@@ -153,6 +159,34 @@ export function useTransactions(opts: { limit?: number; status?: 'pending' } = {
     },
   })
 }
+
+/** V13-6 · Giao dịch của một ví trong khoảng [from, to) (ngày giờ VN "YYYY-MM-DD"), mới nhất trước. Chuyển nội bộ hiện ở cả 2 ví. */
+export function useWalletTransactions(opts: { walletId: string | undefined; from: string; to: string; status?: 'pending' }) {
+  return useQuery({
+    queryKey: ['transactions', 'wallet', opts],
+    enabled: !!opts.walletId,
+    queryFn: async () => {
+      let q = supabase
+        .from('transactions')
+        .select(TXN_COLUMNS)
+        .is('deleted_at', null)
+        .or(`wallet_id.eq.${opts.walletId},to_wallet_id.eq.${opts.walletId}`)
+        .gte('occurred_at', new Date(`${opts.from}T00:00:00+07:00`).toISOString())
+        .lt('occurred_at', new Date(`${opts.to}T00:00:00+07:00`).toISOString())
+        .order('occurred_at', { ascending: false })
+        .limit(1000)
+      if (opts.status) q = q.eq('status', opts.status)
+      return (throwIf(await q) ?? []).map(mapTxn)
+    },
+  })
+}
+
+/** Giao dịch lấy từ ngân hàng: chỉ sửa danh mục / mô tả / ghi chú, không sửa số tiền, không xóa (V13-7) */
+export const isBankTxn = (t: Pick<Transaction, 'source'>) => t.source === 'sms'
+
+/** Biệt danh hiển thị trên Trang chủ (profiles.settings.nickname), mặc định là tên cuối */
+export const nicknameOf = (p: { display_name: string | null; settings: Record<string, unknown> } | undefined) =>
+  (typeof p?.settings?.nickname === 'string' && p.settings.nickname.trim()) || p?.display_name?.split(' ').at(-1) || null
 
 /** Chi tiêu hôm nay = chi + được trả hộ (BR-04, BR-13b) */
 export function useTodaySpending() {
@@ -333,12 +367,21 @@ export function useMonthPlan(month: string) {
   return useQuery({
     queryKey: ['plan', 'month', month],
     queryFn: async () => {
-      const row = throwIf(await supabase.from('month_plans').select('income, savings, created_at').eq('month', month).maybeSingle()) as {
+      const row = throwIf(await supabase.from('month_plans').select('income, savings, created_at, day_kinds').eq('month', month).maybeSingle()) as {
         income: number
         savings: number
         created_at: string
+        day_kinds: unknown
       } | null
-      return row ? { income: Number(row.income), savings: Number(row.savings), createdDay: vnDate(new Date(row.created_at)) } : null
+      return row
+        ? {
+            income: Number(row.income),
+            savings: Number(row.savings),
+            createdDay: vnDate(new Date(row.created_at)),
+            rawKinds: (row.day_kinds ?? {}) as Record<string, unknown>,
+            kinds: dayKindsConfig(row.day_kinds),
+          }
+        : null
     },
   })
 }
@@ -438,10 +481,12 @@ export function usePlan(today: string) {
           fixed: recurring.data.filter((r) => r.active),
           spends: spends.data,
           dayKinds: days.data,
+          weights: weightsOf(plan.data.kinds),
           startDay: plan.data.createdDay,
         })
       : null
-  return { month, ready, plan: plan.data ?? null, result, spends: spends.data ?? [], dayKinds: days.data ?? {} }
+  const kinds: DayKindsConfig = plan.data?.kinds ?? dayKindsConfig(null)
+  return { month, ready, plan: plan.data ?? null, result, spends: spends.data ?? [], dayKinds: days.data ?? {}, kinds }
 }
 
 /** Danh mục cấp 2: tìm theo tên (không phân biệt hoa thường) trong danh mục cha, chưa có thì tạo */
@@ -534,7 +579,7 @@ export function useRecap(month: string | null, today: string) {
           .gte('occurred_at', prev.start)
           .lt('occurred_at', prev.end),
         supabase.from('categories').select('id, name'),
-        supabase.from('month_plans').select('income, savings, created_at').eq('month', m).maybeSingle(),
+        supabase.from('month_plans').select('income, savings, created_at, day_kinds').eq('month', m).maybeSingle(),
         supabase.from('recurring_items').select('id, name, amount, due_day, category_id').eq('active', true),
         supabase.from('day_plans').select('day, kind').gte('day', m).lt('day', end.toISOString().slice(0, 10)),
         supabase.from('fund_balances').select('name, target, balance'),
@@ -574,6 +619,7 @@ export function useRecap(month: string | null, today: string) {
           fixed: (throwIf(recurring) ?? []).map((x) => ({ id: x.id, name: x.name, amount: Number(x.amount), dueDay: x.due_day, categoryId: x.category_id })),
           spends,
           dayKinds: Object.fromEntries((throwIf(days) ?? []).map((d) => [d.day, d.kind as DayKind])),
+          weights: weightsOf(dayKindsConfig(p.day_kinds)),
           startDay: vnDate(new Date(p.created_at)),
         })
         // Tháng đã xong: cộng cả kết quả ngày cuối
@@ -590,4 +636,62 @@ export function useRecap(month: string | null, today: string) {
       })
     },
   })
+}
+
+// ─────────────────────────────────────────────────────────────
+// v1.3 · Trang chủ mới
+// ─────────────────────────────────────────────────────────────
+
+/** V13-9 · Tờ tiền đang có trong ví tiền mặt: lần đếm gần nhất + tờ đưa / thối của các giao dịch sau đó */
+export function useCashBills(wallet: Wallet | undefined) {
+  return useQuery({
+    queryKey: ['transactions', 'cash-bills', wallet?.id, wallet?.balance],
+    enabled: !!wallet,
+    queryFn: async (): Promise<BillCounts> => {
+      const last = throwIf(
+        await supabase
+          .from('reconciliations')
+          .select('created_at, denominations')
+          .eq('wallet_id', wallet!.id)
+          .not('denominations', 'is', null)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ) as { created_at: string; denominations: Record<string, number> } | null
+      if (!last) return walletBills(wallet!.balance, null)
+      const rows =
+        throwIf(
+          await supabase
+            .from('transactions')
+            .select('cash_bills')
+            .is('deleted_at', null)
+            .eq('wallet_id', wallet!.id)
+            .not('cash_bills', 'is', null)
+            .gt('created_at', last.created_at),
+        ) ?? []
+      const toCounts = (o: Record<string, number>): BillCounts => Object.fromEntries(Object.entries(o).map(([k, v]) => [Number(k), Number(v)]))
+      return walletBills(
+        wallet!.balance,
+        toCounts(last.denominations),
+        rows.map((r) => toCounts(r.cash_bills as Record<string, number>)),
+      )
+    },
+  })
+}
+
+/** Lưu một phần profiles.settings, cập nhật cache ngay (bấm liên tiếp không ghi đè nhau) */
+export function useSaveSettings() {
+  const qc = useQueryClient()
+  type P = { id: string; settings: Record<string, unknown> }
+  return async (patch: Record<string, unknown>) => {
+    const current = qc.getQueryData<P>(['profile'])
+    if (!current) return
+    const settings = { ...current.settings, ...patch }
+    qc.setQueryData<P>(['profile'], { ...current, settings })
+    const { error } = await supabase.from('profiles').update({ settings }).eq('id', current.id)
+    if (error) {
+      await qc.invalidateQueries({ queryKey: ['profile'] })
+      throw new Error(error.message)
+    }
+  }
 }

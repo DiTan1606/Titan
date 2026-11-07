@@ -54,6 +54,7 @@
   --animate-shake: shake 0.4s ease-in-out;
 }
 
+
 @keyframes shake {
   0%, 100% { translate: 0; }
   20%, 60% { translate: -8px; }
@@ -64,6 +65,12 @@ html,
 body,
 #root {
   min-height: 100%;
+}
+
+/* Khóa zoom như app thật: chặn chạm đúp để phóng to (pinch chặn ở main.tsx) */
+html {
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {

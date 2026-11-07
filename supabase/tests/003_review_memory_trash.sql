@@ -23,7 +23,7 @@ begin
   insert into public.transactions (type, amount, wallet_id, status, source, merchant)
   values ('expense', 55000, vcb, 'pending', 'sms', 'phuc long') returning id into t2;
   insert into public.transactions (type, amount, wallet_id, status, source, merchant)
-  values ('expense', 35000, vcb, 'pending', 'sms', 'com tam') returning id into t3;
+  values ('expense', 35000, vcb, 'pending', 'manual', 'com tam') returning id into t3;
 
   -- Duyệt kèm chọn danh mục → status confirmed + ghi nhớ
   r := public.confirm_transaction(t1, jsonb_build_object('category_id', drink, 'mood', 'worth', 'tags', '["hẹn hò"]'::jsonb));

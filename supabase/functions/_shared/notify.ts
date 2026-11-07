@@ -43,8 +43,8 @@ export function digestMessage(input: { todaySpent: number; plan: PlanResult | nu
     const left = plan.todayLimit - plan.todaySpent
     parts.push(
       left >= 0
-        ? `Hôm nay chi ${formatVnd(plan.todaySpent)} / ${formatVnd(plan.todayLimit)}, dư ${formatVnd(left)} 💚`
-        : `Hôm nay chi ${formatVnd(plan.todaySpent)}, lố ${formatVnd(-left)} so với hạn mức 😬`,
+        ? `Hôm nay chi ${formatVnd(plan.todaySpent)} / ${formatVnd(plan.todayLimit)}, dư ${formatVnd(left)}`
+        : `Hôm nay chi ${formatVnd(plan.todaySpent)}, lố ${formatVnd(-left)} so với hạn mức`,
     )
   } else {
     parts.push(input.todaySpent > 0 ? `Hôm nay chi ${formatVnd(input.todaySpent)}` : 'Hôm nay chưa ghi khoản chi nào')
@@ -78,7 +78,7 @@ export function monthStartMessage(today: string): PushText | null {
   const month = Number(today.slice(5, 7))
   const prev = month === 1 ? 12 : month - 1
   return {
-    title: `Tháng ${month} rồi! 🎉`,
+    title: `Tháng ${month} rồi!`,
     body: `Xem lại tháng ${prev} của bạn và lập kế hoạch tháng ${month} nhé.`,
     url: '/?tab=plan&recap=prev',
   }

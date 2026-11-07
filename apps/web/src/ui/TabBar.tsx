@@ -1,72 +1,57 @@
-import { CalendarRange, House, type LucideIcon, Plus, ReceiptText, UserRound } from 'lucide-react'
+import { CalendarRange, House, type LucideIcon, ReceiptText, UserRound } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 
-export type Tab = 'home' | 'transactions' | 'review' | 'plan' | 'me'
+export type Tab = 'home' | 'transactions' | 'plan' | 'me'
 
-const LEFT: { id: Tab; label: string; Icon: LucideIcon }[] = [
+const TABS: { id: Tab; label: string; Icon: LucideIcon }[] = [
   { id: 'home', label: 'Trang chủ', Icon: House },
   { id: 'transactions', label: 'Giao dịch', Icon: ReceiptText },
-]
-const RIGHT: { id: Tab; label: string; Icon: LucideIcon }[] = [
   { id: 'plan', label: 'Kế hoạch', Icon: CalendarRange },
   { id: 'me', label: 'Tôi', Icon: UserRound },
 ]
 
-/** Thanh tab dưới cùng + nút ➕ Ghi nhanh nổi khối ở giữa. */
-export function TabBar(props: { tab: Tab; onTab: (t: Tab) => void; onAdd: () => void; reviewBadge?: number }) {
-  const item = ({ id, label, Icon }: (typeof LEFT)[number]) => {
-    const active = props.tab === id || (id === 'transactions' && props.tab === 'review')
-    return (
-      <button
-        key={id}
-        type="button"
-        onClick={() => props.onTab(id)}
-        className={`relative flex flex-1 flex-col items-center gap-0.5 pt-2 pb-1 text-[11px] font-bold ${active ? 'text-brand-500' : 'text-ink-400'}`}
-      >
-        {active && (
-          <motion.span
-            layoutId="tab-pill"
-            className="absolute top-1 h-8 w-14 rounded-full bg-brand-50"
-            transition={{ type: 'spring', damping: 26, stiffness: 400 }}
-          />
-        )}
-        <motion.span className="relative" animate={{ scale: active ? 1.1 : 1 }} transition={{ type: 'spring', stiffness: 500 }}>
-          <Icon size={24} strokeWidth={active ? 2.5 : 2} />
-          <AnimatePresence>
-            {id === 'transactions' && !!props.reviewBadge && (
-              <motion.span
-                key={props.reviewBadge}
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                exit={{ scale: 0 }}
-                className="absolute -top-1.5 -right-2.5 min-w-5 rounded-full border-2 border-white bg-attn-400 px-1 text-center text-[10px] leading-4 font-extrabold text-white"
-              >
-                {props.reviewBadge}
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </motion.span>
-        <span className="relative">{label}</span>
-      </button>
-    )
-  }
-
+/** Thanh tab dưới cùng: chỉ icon (V13-1). Ghi nhanh đã nằm trong Trang chủ. */
+export function TabBar(props: { tab: Tab; onTab: (t: Tab) => void; homeBadge?: number }) {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t-2 border-ink-100 bg-white pb-[env(safe-area-inset-bottom)]">
-      <div className="mx-auto flex max-w-md items-end px-2">
-        {LEFT.map(item)}
-        <div className="flex flex-1 justify-center">
-          <motion.button
-            type="button"
-            aria-label="Ghi nhanh"
-            onClick={props.onAdd}
-            whileTap={{ scale: 0.9 }}
-            className="btn-3d -mt-6 grid size-16 place-items-center rounded-[1.4rem] border-brand-600 bg-brand-400 text-white"
-          >
-            <Plus size={32} strokeWidth={3} />
-          </motion.button>
-        </div>
-        {RIGHT.map(item)}
+      <div className="mx-auto flex max-w-md px-2">
+        {TABS.map(({ id, label, Icon }) => {
+          const active = props.tab === id
+          return (
+            <button
+              key={id}
+              type="button"
+              aria-label={label}
+              aria-current={active ? 'page' : undefined}
+              onClick={() => props.onTab(id)}
+              className={`relative flex h-14 flex-1 items-center justify-center ${active ? 'text-brand-500' : 'text-ink-400'}`}
+            >
+              {active && (
+                <motion.span
+                  layoutId="tab-pill"
+                  className="absolute h-10 w-16 rounded-full bg-brand-50"
+                  transition={{ type: 'spring', damping: 26, stiffness: 400 }}
+                />
+              )}
+              <motion.span className="relative" animate={{ scale: active ? 1.12 : 1 }} transition={{ type: 'spring', stiffness: 500 }}>
+                <Icon size={26} strokeWidth={active ? 2.5 : 2} />
+                <AnimatePresence>
+                  {id === 'home' && !!props.homeBadge && (
+                    <motion.span
+                      key={props.homeBadge}
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      exit={{ scale: 0 }}
+                      className="absolute -top-1.5 -right-2.5 min-w-5 rounded-full border-2 border-white bg-attn-400 px-1 text-center text-[10px] leading-4 font-extrabold text-white"
+                    >
+                      {props.homeBadge}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </motion.span>
+            </button>
+          )
+        })}
       </div>
     </nav>
   )

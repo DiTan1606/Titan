@@ -17,8 +17,10 @@ describe('homeMessage', () => {
   it('nhiều khoản chờ duyệt được ưu tiên nhất', () =>
     expect(homeMessage({ ...base, pendingCount: 4, drinksThisWeek: 5 })).toContain('4 khoản'))
 
+  it('tiêu lố hạn mức ngày → cà khịa trước cả trà sữa', () =>
+    expect(homeMessage({ ...base, drinksThisWeek: 5, todayLeft: -32_000 })).toBe('Lố 32k rồi đó. Mai ăn mì gói nha'))
   it('cà khịa trà sữa từ ly thứ 3 trong tuần', () =>
-    expect(homeMessage({ ...base, drinksThisWeek: 3 })).toBe('Trà sữa lần thứ 3 tuần này rồi đó nha 🧋'))
+    expect(homeMessage({ ...base, drinksThisWeek: 3 })).toBe('Trà sữa lần thứ 3 tuần này rồi đó nha'))
 
   it('tiêu gấp rưỡi bình thường', () =>
     expect(homeMessage({ ...base, todaySpent: 160_000 })).toContain('160k'))
@@ -30,7 +32,7 @@ describe('homeMessage', () => {
     expect(homeMessage({ ...base, yesterdaySpent: 70_000 })).toContain('ít hơn bình thường 30k'))
 
   it('chưa đủ dữ liệu trung bình → không so sánh', () =>
-    expect(homeMessage({ ...base, avgDaily: 0, yesterdaySpent: 10_000 })).toBe('Mọi khoản đều trong tầm kiểm soát ✨'))
+    expect(homeMessage({ ...base, avgDaily: 0, yesterdaySpent: 10_000 })).toBe('Mọi khoản đều trong tầm kiểm soát'))
 
   it('buổi sáng chưa tiêu', () =>
     expect(homeMessage({ ...base, hour: 7, todaySpent: 0, yesterdaySpent: 0 })).toContain('Ngày mới'))

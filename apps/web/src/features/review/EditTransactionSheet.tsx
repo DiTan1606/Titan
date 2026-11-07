@@ -1,10 +1,11 @@
-import { Repeat, Trash2 } from 'lucide-react'
+import { Lock, Repeat, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { CategoryPicker } from '../../components/CategoryPicker'
 import { MoneyInput } from '../../components/MoneyInput'
 import {
   type Category,
   confirmTransaction,
+  isBankTxn,
   isOutflow,
   needsCategory,
   restoreTransaction,
@@ -13,17 +14,17 @@ import {
   useRefreshMoney,
   useWallets,
 } from '../../lib/data'
-import { formatDay, formatTime } from '../../lib/format'
+import { formatDay, formatTime, formatVnd } from '../../lib/format'
 import { Button } from '../../ui/Button'
 import { Sheet } from '../../ui/Sheet'
 import { useToast } from '../../ui/toast-context'
 import { ChangeTypeSheet } from './ChangeTypeSheet'
 import { typeOptions } from './typeOptions'
 
+// Mặc định là bình thường (không ghi gì); chỉ đánh dấu khi đáng tiền hoặc hối hận. Chạm lại để bỏ.
 const MOODS = [
-  { value: 'worth', label: '😊 Đáng tiền' },
-  { value: 'neutral', label: '😐 Bình thường' },
-  { value: 'regret', label: '😬 Hối hận' },
+  { value: 'worth', label: 'Đáng tiền' },
+  { value: 'regret', label: 'Hối hận' },
 ] as const
 
 /** Sửa một giao dịch (cũng là duyệt nếu đang chờ) · đổi loại · xóa vào thùng rác. */
@@ -44,12 +45,14 @@ function EditForm(props: { txn: Transaction; categories: Category[]; onClose: ()
   const [description, setDescription] = useState(txn.description ?? '')
   const [amount, setAmount] = useState<number | null>(txn.amount)
   const [categoryId, setCategoryId] = useState(txn.categoryId)
-  const [note, setNote] = useState('')
-  const [mood, setMood] = useState<string | null>(null)
+  const [note, setNote] = useState(txn.note ?? '')
+  const [mood, setMood] = useState<string | null>(txn.mood)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const kind = txn.type === 'income' ? 'income' : 'expense'
+  // V13-7: giao dịch lấy từ ngân hàng chỉ sửa danh mục, mô tả, ghi chú — không sửa số tiền, không xóa
+  const locked = isBankTxn(txn)
 
   async function run(action: () => Promise<void>) {
     setBusy(true)
@@ -67,9 +70,10 @@ function EditForm(props: { txn: Transaction; categories: Category[]; onClose: ()
     run(async () => {
       if (!amount || amount <= 0) throw new Error('Số tiền phải lớn hơn 0')
       if (needsCategory(txn.type) && !categoryId) throw new Error('Chọn danh mục trước nhé')
-      const patch: Record<string, unknown> = { description, amount, category_id: categoryId }
-      if (note.trim()) patch.note = note.trim()
-      if (mood) patch.mood = mood
+      const patch: Record<string, unknown> = { description, category_id: categoryId }
+      if (!locked) patch.amount = amount
+      if (note.trim() !== (txn.note ?? '')) patch.note = note.trim() || null
+      if (mood !== txn.mood) patch.mood = mood
       await confirmTransaction(txn.id, patch)
       await refresh()
       toast(txn.status === 'pending' ? 'Đã lưu và duyệt' : 'Đã lưu', { tone: 'success' })
@@ -107,9 +111,18 @@ function EditForm(props: { txn: Transaction; categories: Category[]; onClose: ()
         {txn.counterparty ? ` · ${isOutflow(txn.type) ? 'Tới' : 'Từ'} ${txn.counterparty}` : ''}
       </p>
 
-      <Field label="Số tiền">
-        <MoneyInput value={amount} onChange={setAmount} />
-      </Field>
+      {locked ? (
+        <div className="flex items-center justify-between rounded-2xl bg-ink-50 px-4 py-3">
+          <span className="num text-2xl font-extrabold">{formatVnd(txn.amount)}</span>
+          <span className="flex items-center gap-1 text-xs font-bold text-ink-500">
+            <Lock size={13} /> Từ VCB, không sửa số tiền
+          </span>
+        </div>
+      ) : (
+        <Field label="Số tiền">
+          <MoneyInput value={amount} onChange={setAmount} />
+        </Field>
+      )}
 
       <Field label="Mô tả">
         <input
@@ -156,7 +169,7 @@ function EditForm(props: { txn: Transaction; categories: Category[]; onClose: ()
       {error && <p className="text-sm font-semibold text-red-600">{error}</p>}
 
       <div className="flex gap-2">
-        <Button variant="danger" aria-label="Xóa" disabled={busy} onClick={remove} icon={<Trash2 size={20} />} />
+        {!locked && <Button variant="danger" aria-label="Xóa" disabled={busy} onClick={remove} icon={<Trash2 size={20} />} />}
         <Button variant="primary" full disabled={busy} onClick={save}>
           {busy ? 'Đang lưu…' : txn.status === 'pending' ? 'Lưu và duyệt' : 'Lưu'}
         </Button>

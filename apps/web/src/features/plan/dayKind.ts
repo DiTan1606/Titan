@@ -1,6 +1,6 @@
 // Kiểu ngày (V11-4): icon, màu, thứ tự chạm để đổi, lưu xuống DB
 import { House, type LucideIcon, PartyPopper, Smile, UtensilsCrossed } from 'lucide-react'
-import type { DayKind } from '@shared/budget.ts'
+import type { DayKind, DayKindsConfig } from '@shared/budget.ts'
 import { supabase } from '../../lib/supabase'
 
 export const DAY_ICON: Record<DayKind, LucideIcon> = { home: House, normal: Smile, fancy: UtensilsCrossed, party: PartyPopper }
@@ -10,7 +10,17 @@ export const DAY_STYLE: Record<DayKind, string> = {
   fancy: 'bg-[#FAECE7] text-[#993C1D] border-[#F5C4B3]',
   party: 'bg-[#FBEAF0] text-[#993556] border-[#F4C0D1]',
 }
-export const NEXT_KIND: Record<DayKind, DayKind> = { normal: 'fancy', fancy: 'party', party: 'home', home: 'normal' }
+const CYCLE: DayKind[] = ['normal', 'fancy', 'party', 'home']
+
+/** Kiểu tiếp theo khi chạm vào ô ngày trên lịch, bỏ qua kiểu đã ẩn (V13-4) */
+export function nextKind(current: DayKind, kinds: DayKindsConfig): DayKind {
+  const i = CYCLE.indexOf(current)
+  for (let step = 1; step <= CYCLE.length; step++) {
+    const k = CYCLE[(i + step) % CYCLE.length]
+    if (!kinds[k].off) return k
+  }
+  return 'normal'
+}
 export const WEEKDAY = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
 
 /** Đổi kiểu ngày (bình thường = xóa dòng) */

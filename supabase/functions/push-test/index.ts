@@ -21,7 +21,7 @@ Deno.serve(async (req) => {
   try {
     const result = await sendPushToUser(db, userData.user.id, {
       title: 'Titan',
-      body: 'Thông báo thử thành công 🎉 Titan đã có thể báo cho bạn khi có giao dịch mới.',
+      body: 'Thông báo thử thành công. Titan đã có thể báo cho bạn khi có giao dịch mới.',
       url: '/',
     })
     return json(result)

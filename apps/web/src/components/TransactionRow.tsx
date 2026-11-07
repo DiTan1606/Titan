@@ -25,13 +25,16 @@ export function TransactionRow({
   txn,
   categories,
   onClick,
+  direction,
 }: {
   txn: Transaction
   categories: Category[]
   onClick?: () => void
+  /** chiều tiền với ví đang xem (trang Giao dịch theo ví): chuyển nội bộ hiện +/− thay vì không dấu */
+  direction?: 'out' | 'in' | null
 }) {
   const cat = categories.find((c) => c.id === txn.categoryId)
-  const sign = SIGN[txn.type]
+  const sign = txn.type === 'transfer' && direction ? (direction === 'out' ? '−' : '+') : SIGN[txn.type]
   const title = txn.description || txn.counterparty || TYPE_LABEL[txn.type] || 'Giao dịch'
   const subtitle = [
     formatTime(txn.occurredAt),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isVcbReceipt, parseReceiptTime, parseVcbReceipt, receiptDirection, type VcbReceipt } from './vcb-receipt.ts'
+import { isVcbReceipt, parseReceiptTime, parseVcbReceipt, receiptAccounts, receiptDirection, type VcbReceipt } from './vcb-receipt.ts'
 
 // Dựng lại theo cấu trúc biên lai thật (06/11/2026). TẤT CẢ số tài khoản, tên, số lệnh đều là GIẢ.
 // MY = tài khoản của người dùng (đuôi 4321), OTHER = tài khoản người khác.
@@ -185,6 +185,32 @@ describe('parseVcbReceipt – định dạng Gmail thật', () => {
 describe('parseReceiptTime', () => {
   it('có thứ trong tuần ở giữa', () => expect(parseReceiptTime('08:05 Thứ Hai 02/11/2026')).toBe('2026-11-02T08:05:00+07:00'))
   it('ngày giờ vô lý → null', () => expect(parseReceiptTime('25:00 Thứ Hai 40/13/2026')).toBeNull())
+})
+
+describe('receiptDirection · đủ số tài khoản (V13-13)', () => {
+  // người hưởng trùng 4 số cuối với mình
+  const TWIN = { ...parsed(OUT), creditAccount: '5550004321' }
+
+  it('chỉ có 4 số cuối mà cả 2 ô đều khớp → không đoán, báo người dùng nhập đủ số', () => {
+    expect(receiptDirection(TWIN, '4321')).toEqual({ status: 'unknown', reason: 'account_ambiguous' })
+  })
+
+  it('có đủ số → phân biệt chính xác dù trùng 4 số cuối', () => {
+    expect(receiptDirection(TWIN, { suffix: '4321', exact: new Set([MY]) })).toMatchObject({ status: 'ok', sign: '-', counterpartyAccount: '5550004321' })
+    expect(receiptDirection({ ...TWIN, debitAccount: '5550004321', creditAccount: MY }, { suffix: '4321', exact: new Set([MY]) })).toMatchObject({
+      status: 'ok',
+      sign: '+',
+    })
+  })
+
+  it('đủ số mà không khớp ô nào → account_not_matched (không rơi về so 4 số)', () => {
+    expect(receiptDirection(TWIN, { suffix: '4321', exact: new Set() })).toEqual({ status: 'unknown', reason: 'account_not_matched' })
+  })
+
+  it('lấy 2 số tài khoản trong biên lai để băm', () => {
+    expect(receiptAccounts(OUT)).toEqual([MY, OTHER])
+    expect(receiptAccounts('SMS bình thường')).toEqual([])
+  })
 })
 
 describe('receiptDirection', () => {

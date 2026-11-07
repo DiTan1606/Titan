@@ -1,14 +1,23 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
-import { Copy, KeyRound, Mail } from 'lucide-react'
+import { ChevronDown, Copy, KeyRound, Mail, RefreshCw, Unplug } from 'lucide-react'
+import { AccountNumberInput } from '../../components/AccountNumberInput'
+import { isAccountNumber } from '../../lib/account'
 import { useApiTokenStatus } from '../../lib/data'
+import { disconnectGmail, signInWithGoogle, useGmailConnection } from '../../lib/gmail'
 import { Button } from '../../ui/Button'
 import { supabase } from '../../lib/supabase'
 
 // Cài đặt kết nối Gmail → Titan (docs/04-ket-noi-gmail.md)
+// V13-12: cách chính là đăng nhập Google có quyền đọc Gmail; Apps Script + token là cách thủ công dự phòng.
 export function AutoSyncCard() {
+  const gmail = useGmailConnection()
+  const qc = useQueryClient()
+  const [manual, setManual] = useState(false)
   const [walletId, setWalletId] = useState<string | null>(null)
-  const [suffix, setSuffix] = useState('')
+  const [account, setAccount] = useState('')
   const [savedSuffix, setSavedSuffix] = useState<string | null>(null)
+  const [hasFull, setHasFull] = useState(false)
   const [token, setToken] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -17,25 +26,28 @@ export function AutoSyncCard() {
   useEffect(() => {
     supabase
       .from('wallets')
-      .select('id, account_suffix')
+      .select('id, account_suffix, account_hash')
       .eq('kind', 'bank')
       .maybeSingle()
       .then(({ data }) => {
         if (!data) return
         setWalletId(data.id)
         setSavedSuffix(data.account_suffix)
-        setSuffix(data.account_suffix ?? '')
+        setHasFull(!!data.account_hash)
       })
   }, [])
 
-  async function saveSuffix() {
-    if (!walletId || !/^\d{4}$/.test(suffix)) return setMessage('Nhập đúng 4 chữ số')
+  // V13-13: nhập đủ số tài khoản → lưu 4 số cuối + băm (không lưu số thật)
+  async function saveAccount() {
+    if (!walletId || !isAccountNumber(account)) return setMessage('Nhập đủ số tài khoản VCB (6–19 chữ số)')
     setBusy(true)
-    const { error } = await supabase.from('wallets').update({ account_suffix: suffix }).eq('id', walletId)
+    const { data, error } = await supabase.rpc('set_bank_account', { p_number: account })
     setBusy(false)
     if (error) return setMessage(error.message)
-    setSavedSuffix(suffix)
-    setMessage('Đã lưu 4 số cuối tài khoản VCB')
+    setSavedSuffix(data as string)
+    setHasFull(true)
+    setAccount('')
+    setMessage('Đã lưu số tài khoản VCB')
   }
 
   async function createToken() {
@@ -58,36 +70,66 @@ export function AutoSyncCard() {
         <div className="flex-1">
           <h2 className="font-extrabold">Tự ghi từ email VCB</h2>
           <p className="text-sm text-ink-500">
-            {tokenStatus.data
-              ? tokenStatus.data.last_used_at
-                ? `Gmail gửi dữ liệu ${timeAgo(tokenStatus.data.last_used_at)}`
-                : 'Đã có token, chưa nhận dữ liệu từ Gmail'
-              : 'Chưa kết nối'}
+            {gmail.data?.status === 'active'
+              ? `${gmail.data.email} · kiểm tra ${gmail.data.last_checked_at ? timeAgo(gmail.data.last_checked_at) : 'sắp tới'}`
+              : gmail.data
+                ? 'Mất kết nối Gmail, bấm Kết nối lại'
+                : tokenStatus.data?.last_used_at
+                  ? `Apps Script gửi dữ liệu ${timeAgo(tokenStatus.data.last_used_at)}`
+                  : 'Chưa kết nối'}
           </p>
         </div>
         <span
-          className={`size-3 rounded-full ${tokenStatus.data?.last_used_at ? 'bg-brand-400' : tokenStatus.data ? 'bg-attn-400' : 'bg-ink-300'}`}
+          className={`size-3 rounded-full ${gmail.data?.status === 'active' || tokenStatus.data?.last_used_at ? 'bg-brand-400' : gmail.data ? 'bg-red-500' : 'bg-ink-300'}`}
         />
       </div>
 
-      <p className="mt-4 text-sm font-bold text-ink-600">4 số cuối tài khoản VCB chính</p>
-      <div className="mt-1.5 flex gap-2">
-        <input
-          inputMode="numeric"
-          maxLength={4}
-          value={suffix}
-          onChange={(e) => setSuffix(e.target.value.replace(/\D/g, ''))}
-          className="num h-12 w-28 rounded-2xl border-2 border-ink-100 px-3 text-center text-xl font-extrabold tracking-[0.3em] outline-none focus:border-brand-300"
-          placeholder="____"
-        />
-        <Button size="md" disabled={busy || suffix === savedSuffix} onClick={saveSuffix} caps={false}>
-          Lưu
+      <div className="mt-4 flex gap-2">
+        <Button variant={gmail.data?.status === 'active' ? 'secondary' : 'primary'} full icon={<RefreshCw size={18} />} caps={false} onClick={() => signInWithGoogle()}>
+          {gmail.data ? 'Kết nối lại Gmail' : 'Kết nối Gmail'}
+        </Button>
+        {gmail.data && (
+          <Button
+            variant="danger"
+            aria-label="Ngắt kết nối Gmail"
+            icon={<Unplug size={18} />}
+            onClick={async () => {
+              if (!confirm('Ngắt kết nối? Titan sẽ không tự ghi giao dịch VCB từ Gmail nữa.')) return
+              try {
+                await disconnectGmail()
+                await qc.invalidateQueries({ queryKey: ['gmail'] })
+              } catch (e) {
+                setMessage((e as Error).message)
+              }
+            }}
+          />
+        )}
+      </div>
+
+      <p className="mt-4 text-sm font-bold text-ink-600">Số tài khoản VCB</p>
+      <p className="text-sm text-ink-500">
+        {savedSuffix
+          ? hasFull
+            ? `Đang dùng •••• ${savedSuffix} (đủ số, so khớp chính xác)`
+            : `Mới có 4 số cuối •••• ${savedSuffix}. Nhập đủ số để không nhầm khi chuyển cho người trùng 4 số cuối.`
+          : 'Chưa nhập'}
+      </p>
+      <div className="mt-2 flex flex-col gap-2">
+        <AccountNumberInput value={account} onChange={setAccount} />
+        <Button size="md" disabled={busy || !isAccountNumber(account)} onClick={saveAccount} caps={false}>
+          Lưu số tài khoản
         </Button>
       </div>
 
-      <Button variant="soft" full disabled={busy} onClick={createToken} icon={<KeyRound size={18} />} className="mt-4" caps={false}>
-        Tạo token kết nối Gmail
-      </Button>
+      <button type="button" onClick={() => setManual(!manual)} className="mt-4 flex w-full items-center justify-between text-sm font-bold text-ink-500">
+        Cách thủ công: Apps Script + token
+        <ChevronDown size={18} className={`transition-transform ${manual ? 'rotate-180' : ''}`} />
+      </button>
+      {manual && (
+        <Button variant="soft" full disabled={busy} onClick={createToken} icon={<KeyRound size={18} />} className="mt-2" caps={false}>
+          Tạo token kết nối Gmail
+        </Button>
+      )}
 
       {token && (
         <div className="mt-3 rounded-2xl border-2 border-attn-200 bg-attn-50 p-3 text-sm">

@@ -1,6 +1,6 @@
 // Quy mọi nguồn tự động (SMS VCB, email biên lai VCB) về một dạng chung trước khi ghi giao dịch.
 // Hàm thuần — không gọi mạng.
-import { isVcbReceipt, parseVcbReceipt, RECEIPT_PARSER_VERSION, receiptDirection } from './email/vcb-receipt.ts'
+import { isVcbReceipt, type MyAccount, parseVcbReceipt, RECEIPT_PARSER_VERSION, receiptDirection } from './email/vcb-receipt.ts'
 import { isAtmWithdrawal, merchantKeyword, normalizeForDedupe, PARSER_VERSION, parseVcbSms } from './sms/vcb.ts'
 import { foldVietnamese } from './text.ts'
 
@@ -33,7 +33,8 @@ export type IncomingResult = {
   | { status: 'failed'; reason: string }
 )
 
-export function parseIncoming(text: string, bankAccountSuffix: string | null): IncomingResult {
+/** `account`: 4 số cuối (chuỗi) hoặc { suffix, exact } khi người dùng đã nhập đủ số tài khoản (V13-13) */
+export function parseIncoming(text: string, account: MyAccount | string | null): IncomingResult {
   if (isVcbReceipt(text)) {
     const r = parseVcbReceipt(text)
     if (r.status === 'failed') {
@@ -42,7 +43,7 @@ export function parseIncoming(text: string, bankAccountSuffix: string | null): I
     const receipt = r.data
     // Số lệnh giao dịch là duy nhất → chống trùng tuyệt đối, kể cả khi email bị gửi lại
     const base = { parserVersion: RECEIPT_PARSER_VERSION, dedupeSource: `vcb-order:${receipt.orderNumber}` }
-    const dir = receiptDirection(receipt, bankAccountSuffix)
+    const dir = receiptDirection(receipt, account)
     if (dir.status === 'unknown') {
       return dir.reason === 'own_transfer'
         ? { ...base, status: 'ignored', reason: dir.reason }

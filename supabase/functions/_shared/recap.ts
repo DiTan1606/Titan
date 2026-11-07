@@ -101,7 +101,7 @@ export function buildRecap(input: {
 
 function verdict(surplus: number | null, changePct: number | null, partial: boolean): string {
   const when = partial ? 'Tới giờ' : 'Cả tháng'
-  if (surplus !== null && surplus > 0) return `${when} bạn tiêu ít hơn kế hoạch ${formatVnd(surplus)}. Bỏ phần này vào quỹ là đẹp! 💚`
+  if (surplus !== null && surplus > 0) return `${when} bạn tiêu ít hơn kế hoạch ${formatVnd(surplus)}. Bỏ phần này vào quỹ là đẹp!`
   if (surplus !== null && surplus < 0)
     return `${when} bạn tiêu lố ${formatVnd(-surplus)}. Tháng sau thử đánh dấu thêm vài ngày "Ở nhà" nhé.`
   if (changePct !== null && changePct < 0) return `Chi ít hơn tháng trước ${-changePct}%. Ví đang cảm ơn bạn đó!`

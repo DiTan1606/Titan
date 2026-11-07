@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Check, ChevronRight, Pencil, Plus, Sparkles, Clapperboard } from 'lucide-react'
 import { motion } from 'motion/react'
 import { createElement, useState } from 'react'
-import { DAY_LABEL, type DayKind, spentByParent } from '@shared/budget.ts'
+import { DAY_KINDS, type DayKind, spentByParent } from '@shared/budget.ts'
 import { type Category, prevMonth, type RecurringItem, useCategories, useCategoryBudgets, usePlan, useRecurringItems, useRefreshMoney } from '../../lib/data'
 import { formatVnd } from '../../lib/format'
 import { useVnDays } from '../../lib/useVnDays'
@@ -10,7 +10,7 @@ import { AnimatedVnd } from '../../ui/AnimatedNumber'
 import { Button } from '../../ui/Button'
 import { CategoryIcon } from '../../ui/CategoryIcon'
 import { useToast } from '../../ui/toast-context'
-import { DAY_ICON, DAY_STYLE, NEXT_KIND, setDayKind, WEEKDAY } from './dayKind'
+import { DAY_ICON, DAY_STYLE, nextKind, setDayKind, WEEKDAY } from './dayKind'
 import { RecapStory } from '../recap/RecapStory'
 import { FundsSection } from './FundsSection'
 import { BudgetSheet, MonthPlanSheet, RecurringSheet } from './PlanSheets'
@@ -18,7 +18,7 @@ import { BudgetSheet, MonthPlanSheet, RecurringSheet } from './PlanSheets'
 // V11 · Tab Kế hoạch
 export function PlanScreen(props: { openRecap?: 'prev' }) {
   const { today } = useVnDays()
-  const { month, ready, plan, result, spends } = usePlan(today)
+  const { month, ready, plan, result, spends, kinds } = usePlan(today)
   const recurring = useRecurringItems()
   const categories = useCategories()
   const budgets = useCategoryBudgets()
@@ -37,7 +37,7 @@ export function PlanScreen(props: { openRecap?: 'prev' }) {
 
   async function cycleDay(day: string, current: DayKind) {
     try {
-      await setDayKind(day, NEXT_KIND[current])
+      await setDayKind(day, nextKind(current, kinds))
       await qc.invalidateQueries({ queryKey: ['plan', 'days'] })
     } catch (e) {
       toast((e as Error).message, { tone: 'error' })
@@ -118,9 +118,9 @@ export function PlanScreen(props: { openRecap?: 'prev' }) {
               ))}
             </div>
             <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-ink-500">
-              {(Object.keys(DAY_LABEL) as DayKind[]).map((k) => (
+              {DAY_KINDS.filter((k) => !kinds[k].off).map((k) => (
                 <span key={k} className="inline-flex items-center gap-1">
-                  {createElement(DAY_ICON[k], { size: 14 })} {DAY_LABEL[k]}
+                  {createElement(DAY_ICON[k], { size: 14 })} {kinds[k].label} ×{kinds[k].weight}
                 </span>
               ))}
             </div>

@@ -11,7 +11,7 @@ import { ReconcileWallet } from './ReconcileWallet'
  * V12-1 · Tổng kết cuối ngày (BRD P9): kết quả ngày → chờ duyệt → đối soát tiền mặt → đối soát VCB.
  * Dùng bên trong Sheet; mở từ Trang chủ hoặc từ thông báo 20:00 (/?screen=digest).
  */
-export function DigestScreen(props: { onOpenReview: () => void; onForgot: () => void }) {
+export function DigestScreen(props: { onOpenReview: () => void; onForgot: (wallet: 'bank' | 'cash') => void }) {
   const { today } = useVnDays()
   const { result: plan } = usePlan(today)
   const spent = useTodaySpending()
@@ -32,7 +32,7 @@ export function DigestScreen(props: { onOpenReview: () => void; onForgot: () => 
           <>
             <p className="mt-2 text-sm font-semibold opacity-90">Hạn mức {formatVnd(plan.todayLimit)}</p>
             <span className="mt-3 inline-flex rounded-xl bg-white/20 px-3 py-1 text-sm font-bold">
-              {left >= 0 ? `+${formatVnd(left)} vào hũ dư 💚` : `−${formatVnd(-left)} trừ vào hũ dư`}
+              {left >= 0 ? `+${formatVnd(left)} vào hũ dư` : `−${formatVnd(-left)} trừ vào hũ dư`}
             </span>
           </>
         )}
@@ -63,7 +63,7 @@ export function DigestScreen(props: { onOpenReview: () => void; onForgot: () => 
           iconClass="bg-[#EAF3DE] text-[#3B6D11]"
           defaultOpen={!!cashUsed.data}
           done={done.data?.has(cash.id) ?? false}
-          onForgot={props.onForgot}
+          onForgot={() => props.onForgot('cash')}
         />
       )}
       {bank && (
@@ -75,7 +75,7 @@ export function DigestScreen(props: { onOpenReview: () => void; onForgot: () => 
           iconClass="bg-brand-50 text-brand-500"
           defaultOpen={false}
           done={done.data?.has(bank.id) ?? false}
-          onForgot={props.onForgot}
+          onForgot={() => props.onForgot('bank')}
         />
       )}
     </div>

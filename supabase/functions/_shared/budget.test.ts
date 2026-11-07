@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computePlan, monthDays, type PlanInput, spentByParent } from './budget.ts'
+import { computePlan, dayKindsConfig, monthDays, type PlanInput, spentByParent } from './budget.ts'
 
 // Tháng 11/2026 có 30 ngày
 const base: PlanInput = {
@@ -122,6 +122,26 @@ describe('computePlan – hũ dư (V11-5) và hôm nay', () => {
     const p = computePlan({ ...base, income: 4_000_000 })
     expect(p.flexibleBudget).toBeLessThan(0)
     expect(p.todayLimit).toBe(0)
+  })
+})
+
+describe('kiểu ngày tùy chỉnh (V13-4)', () => {
+  it('hệ số riêng của tháng thay cho mặc định', () => {
+    const kinds = { '2026-11-01': 'fancy' as const }
+    const def = computePlan({ ...base, dayKinds: kinds })
+    const custom = computePlan({ ...base, dayKinds: kinds, weights: { fancy: 3 } })
+    expect(custom.todayLimit).toBeGreaterThan(def.todayLimit)
+    // 1 ngày hệ số 3 + 29 ngày hệ số 1 = 32 phần
+    expect(custom.todayLimit).toBe(Math.floor(((def.flexibleBudget * 3) / 32) / 1000) * 1000)
+  })
+
+  it('đọc cấu hình: thiếu → mặc định, "Bình thường" luôn 1 và không ẩn, hệ số bị kẹp 0.1–5', () => {
+    const c = dayKindsConfig({ normal: { weight: 9, off: true, label: 'Đi học' }, party: { weight: 99, off: true }, home: { label: '  ' } })
+    expect(c.normal).toEqual({ label: 'Đi học', weight: 1, off: false })
+    expect(c.party).toEqual({ label: 'Tiệc', weight: 5, off: true })
+    expect(c.home.label).toBe('Ở nhà')
+    expect(c.fancy.weight).toBe(1.8)
+    expect(dayKindsConfig(null).home.weight).toBe(0.5)
   })
 })
 

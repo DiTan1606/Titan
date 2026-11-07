@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Titan · Chính sách quyền riêng tư</title>
+    <style>
+      body { font-family: system-ui, -apple-system, sans-serif; max-width: 680px; margin: 0 auto; padding: 32px 20px 64px; line-height: 1.6; color: #1c1c1a; background: #f7f6f2; }
+      h1 { font-size: 28px; margin-bottom: 4px; }
+      h2 { font-size: 19px; margin-top: 28px; }
+      p.muted { color: #5f5e5a; margin-top: 0; }
+      code { background: #efede6; padding: 1px 5px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>Chính sách quyền riêng tư của Titan</h1>
+    <p class="muted">Cập nhật: 08/11/2026 · https://titan-ditan.vercel.app</p>
+
+    <p>Titan là ứng dụng ghi chép chi tiêu cá nhân. Trang này giải thích Titan đọc gì, lưu gì và không làm gì với dữ liệu của bạn.</p>
+
+    <h2>1. Đăng nhập bằng Google</h2>
+    <p>Titan dùng tài khoản Google để đăng nhập và chỉ lấy tên và địa chỉ email của bạn để tạo tài khoản.</p>
+
+    <h2>2. Quyền đọc Gmail</h2>
+    <p>Khi bạn cho phép, Titan dùng quyền <code>gmail.readonly</code> để <strong>chỉ tìm và đọc email biên lai giao dịch do Vietcombank gửi</strong> (người gửi <code>VCBDigibank@info.vietcombank.com.vn</code>), rồi ghi số tiền, thời gian và nội dung giao dịch thành khoản chờ bạn duyệt.</p>
+    <ul>
+      <li>Titan không đọc, không lưu và không xử lý bất kỳ email nào khác trong hộp thư của bạn.</li>
+      <li>Titan không gửi, sửa hay xóa email.</li>
+      <li>Nội dung biên lai được lưu sau khi đã che số tài khoản.</li>
+      <li>Khóa truy cập Gmail do Google cấp được mã hóa trước khi lưu. Khóa giải mã không nằm trong cơ sở dữ liệu.</li>
+    </ul>
+    <p>Titan tuân thủ <a href="https://developers.google.com/terms/api-services-user-data-policy">Chính sách dữ liệu người dùng của Google API Services</a>, bao gồm các yêu cầu về Giới hạn sử dụng (Limited Use). Dữ liệu từ Gmail chỉ dùng để hiển thị giao dịch cho chính bạn. Titan không bán, không chia sẻ cho bên thứ ba, không dùng cho quảng cáo và không dùng để huấn luyện mô hình AI.</p>
+
+    <h2>3. Dữ liệu Titan lưu</h2>
+    <p>Giao dịch, ví, danh mục, kế hoạch chi tiêu, quỹ và cài đặt của bạn, lưu trên Supabase. Mỗi người dùng chỉ truy cập được dữ liệu của chính mình. Titan chỉ lưu 4 số cuối tài khoản ngân hàng, không bao giờ hỏi mật khẩu ngân hàng.</p>
+
+    <h2>4. Gợi ý danh mục bằng AI</h2>
+    <p>Để đoán danh mục cho giao dịch, Titan có thể gửi <strong>mô tả ngắn và số tiền của giao dịch</strong> (không có email, tên tài khoản hay số tài khoản) tới dịch vụ AI. Dữ liệu này không dùng để huấn luyện mô hình.</p>
+
+    <h2>5. Ngắt kết nối và xóa dữ liệu</h2>
+    <p>Bạn có thể ngắt kết nối Gmail bất cứ lúc nào trong Titan (tab Tôi → Ngắt kết nối), hoặc thu hồi quyền tại <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>. Muốn xóa toàn bộ dữ liệu, hãy liên hệ email bên dưới.</p>
+
+    <h2>6. Liên hệ</h2>
+    <p>23521406@gm.uit.edu.vn</p>
+  </body>
+</html>

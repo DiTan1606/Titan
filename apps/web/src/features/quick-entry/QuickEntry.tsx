@@ -4,18 +4,21 @@ import { CalendarDays, CalendarClock, HandCoins, Landmark, PiggyBank, TriangleAl
 import { AnimatePresence, motion } from 'motion/react'
 import { useMemo, useRef, useState } from 'react'
 import { CategoryPicker } from '../../components/CategoryPicker'
-import { useCategories, useRefreshMoney, useWallets } from '../../lib/data'
+import { type BillCounts, billsTotal, cashBillsValid, spendDelta } from '../../lib/bills'
+import { useCashBills, useCategories, useRefreshMoney, useWallets } from '../../lib/data'
 import { formatVnd } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
 import { useVnDays } from '../../lib/useVnDays'
 import { Button } from '../../ui/Button'
 import { CategoryIcon } from '../../ui/CategoryIcon'
 import { useToast } from '../../ui/toast-context'
+import { CashBills } from './CashBills'
 
 type Draft = { description: string; amount: number; categoryId: string | null }
 
 // BRD P3 · Ghi nhanh: "bánh mì: 20k; mì tôm: 12k" + lệnh "/" + "@tên" + hàng nút chọn nhanh
-export function QuickEntry({ onSaved }: { onSaved?: () => void }) {
+/** `wallet`: ghi thẳng vào ví này (Trang chủ, tab VCB / Tiền mặt), ẩn nút chọn VCB */
+export function QuickEntry({ onSaved, wallet: fixedWallet }: { onSaved?: () => void; wallet?: 'bank' | 'cash' }) {
   const [text, setText] = useState('')
   const [step, setStep] = useState<'type' | 'review'>('type')
   const [drafts, setDrafts] = useState<Draft[]>([])
@@ -26,8 +29,16 @@ export function QuickEntry({ onSaved }: { onSaved?: () => void }) {
   const refresh = useRefreshMoney()
   const toast = useToast()
   const { today, yesterday } = useVnDays()
+  // V13-9: tờ đưa / tờ thối (chi) hoặc tờ nhận (thu) khi ghi tiền mặt
+  const [given, setGiven] = useState<BillCounts>({})
+  const [change, setChange] = useState<BillCounts>({})
+  const cashWallet = wallets.data?.find((w) => w.kind === 'cash')
+  const inWallet = useCashBills(cashWallet)
 
-  const parsed = useMemo(() => parseQuickEntry(text), [text])
+  const parsed = useMemo(() => {
+    const p = parseQuickEntry(text)
+    return fixedWallet ? { ...p, wallet: fixedWallet } : p
+  }, [text, fixedWallet])
   const canContinue = parsed.items.length > 0 && parsed.errors.length === 0
   const categoryKind = parsed.type === 'income' ? 'income' : 'expense'
   const total = parsed.items.reduce((s, i) => s + i.amount, 0)
@@ -71,13 +82,24 @@ export function QuickEntry({ onSaved }: { onSaved?: () => void }) {
     setBusy(false)
   }
 
+  const draftTotal = drafts.reduce((s, d) => s + d.amount, 0)
+  const cashKind = parsed.wallet === 'cash' && (parsed.type === 'expense' || parsed.type === 'income') ? parsed.type : null
+  const billsOk = !cashKind || cashBillsValid(cashKind, draftTotal, given, change)
+  function billsFor(p: Parsed): BillCounts | null {
+    if (p.wallet !== 'cash' || billsTotal(given) === 0) return null
+    if (p.type === 'income') return given
+    if (p.type === 'expense') return spendDelta(given, change)
+    return null
+  }
+
   async function save(p: Parsed) {
     const wallet = wallets.data?.find((w) => w.kind === p.wallet)
     if (!wallet) return toast('Không tìm thấy ví', { tone: 'error' })
     const occurredAt = p.date === today ? new Date().toISOString() : `${p.date}T12:00:00+07:00`
+    const bills = billsFor(p)
     setBusy(true)
     const { error } = await supabase.rpc('add_manual_transactions', {
-      p_rows: drafts.map((d) => ({
+      p_rows: drafts.map((d, i) => ({
         type: p.type,
         amount: d.amount,
         occurred_at: occurredAt,
@@ -86,6 +108,8 @@ export function QuickEntry({ onSaved }: { onSaved?: () => void }) {
         description: d.description,
         merchant: merchantKeyword(d.description),
         counterparty: p.counterparty,
+        // tờ tiền tính chung cho cả lần ghi, gắn vào món đầu tiên
+        cash_bills: i === 0 ? bills : null,
       })),
     })
     setBusy(false)
@@ -93,6 +117,8 @@ export function QuickEntry({ onSaved }: { onSaved?: () => void }) {
     toast(`Đã ghi ${drafts.length} món · ${formatVnd(drafts.reduce((s, d) => s + d.amount, 0))}`, { tone: 'success' })
     setText('')
     setDrafts([])
+    setGiven({})
+    setChange({})
     setStep('type')
     await refresh()
     onSaved?.()
@@ -130,9 +156,20 @@ export function QuickEntry({ onSaved }: { onSaved?: () => void }) {
             </motion.li>
           ))}
         </ul>
+        {cashKind && (
+          <CashBills
+            type={cashKind}
+            total={draftTotal}
+            given={given}
+            change={change}
+            available={inWallet.data}
+            onGiven={setGiven}
+            onChange={setChange}
+          />
+        )}
         <div className="mt-2 flex gap-2">
           <Button onClick={() => setStep('type')}>Sửa</Button>
-          <Button variant="primary" full disabled={busy} onClick={() => save(parsed)}>
+          <Button variant="primary" full disabled={busy || !billsOk} onClick={() => save(parsed)}>
             {busy ? 'Đang lưu…' : `Lưu ${drafts.length} món`}
           </Button>
         </div>
@@ -154,9 +191,11 @@ export function QuickEntry({ onSaved }: { onSaved?: () => void }) {
         <Chip active={parsed.type === 'borrow'} onClick={startBorrow} icon={<HandCoins size={16} />}>
           Trả hộ
         </Chip>
-        <Chip active={parsed.wallet === 'bank'} onClick={() => toggleCommand('/vcb')} icon={<Landmark size={16} />}>
-          VCB
-        </Chip>
+        {!fixedWallet && (
+          <Chip active={parsed.wallet === 'bank'} onClick={() => toggleCommand('/vcb')} icon={<Landmark size={16} />}>
+            VCB
+          </Chip>
+        )}
         <Chip active={parsed.type === 'income'} onClick={() => toggleCommand('/thu')} icon={<PiggyBank size={16} />}>
           Khoản thu
         </Chip>

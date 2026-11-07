@@ -2,7 +2,7 @@
 // Xác thực bằng header x-cron-secret (= secret CRON_SECRET), không dùng JWT.
 // Body tùy chọn {"at": "<ISO>"} để giả lập thời điểm khi test; {"user_id": "..."} để chỉ chạy cho một người.
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import { computePlan, type DayKind, monthStart, spentByParent, type Spend } from '../_shared/budget.ts'
+import { computePlan, type DayKind, dayKindsConfig, monthStart, spentByParent, type Spend, weightsOf } from '../_shared/budget.ts'
 import { digestMessage, dueReminder, MORNING_HOUR, monthStartMessage, notifySettings, type PushText, vnClock } from '../_shared/notify.ts'
 import { vnDate } from '../_shared/quick-entry.ts'
 import { timingSafeEqual } from '../_lib/crypto.ts'
@@ -74,7 +74,7 @@ async function loadPlanContext(db: SupabaseClient, userId: string, today: string
   end.setMonth(end.getMonth() + 1)
 
   const [plan, recurring, days, spendRows, pending, budgets] = await Promise.all([
-    db.from('month_plans').select('income, savings, created_at').eq('user_id', userId).eq('month', month).maybeSingle(),
+    db.from('month_plans').select('income, savings, created_at, day_kinds').eq('user_id', userId).eq('month', month).maybeSingle(),
     db.from('recurring_items').select('id, name, amount, due_day, category_id').eq('user_id', userId).eq('active', true),
     db.from('day_plans').select('day, kind').eq('user_id', userId).gte('day', month).lt('day', vnDate(end)),
     db
@@ -120,6 +120,7 @@ async function loadPlanContext(db: SupabaseClient, userId: string, today: string
         })),
         spends,
         dayKinds: Object.fromEntries((days.data ?? []).map((d) => [d.day, d.kind as DayKind])),
+        weights: weightsOf(dayKindsConfig(plan.data.day_kinds)),
         startDay: vnDate(new Date(plan.data.created_at)),
       })
     : null

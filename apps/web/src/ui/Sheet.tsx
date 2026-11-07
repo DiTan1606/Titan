@@ -1,9 +1,19 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import { useVisualViewport } from '../lib/useVisualViewport'
 
 /** Bảng trượt từ dưới lên kiểu iOS: nảy nhẹ khi mở, kéo xuống / chạm nền tối / Esc để đóng. */
 export function Sheet(props: { open: boolean; onClose: () => void; title?: string; children: React.ReactNode }) {
   const { open, onClose } = props
+  // Bàn phím bật → khung chứa co lại đúng vùng nhìn thấy, bảng trượt nằm ngay trên bàn phím
+  const vp = useVisualViewport(open)
+  const panel = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = document.activeElement
+    if (vp && el instanceof HTMLElement && panel.current?.contains(el)) el.scrollIntoView({ block: 'nearest' })
+  }, [vp])
 
   useEffect(() => {
     if (!open) return
@@ -12,7 +22,8 @@ export function Sheet(props: { open: boolean; onClose: () => void; title?: strin
     return () => document.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
-  return (
+  // Portal ra body: cha có transform (hiệu ứng trượt vào) sẽ làm `fixed` bám theo cha thay vì màn hình
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
@@ -20,12 +31,15 @@ export function Sheet(props: { open: boolean; onClose: () => void; title?: strin
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
+          style={vp ? { top: vp.top, height: vp.height, bottom: 'auto' } : undefined}
           onClick={onClose}
         >
           <motion.div
+            ref={panel}
             role="dialog"
             aria-label={props.title}
             onClick={(e) => e.stopPropagation()}
+            style={vp ? { maxHeight: vp.height * 0.92 } : undefined}
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
@@ -44,6 +58,7 @@ export function Sheet(props: { open: boolean; onClose: () => void; title?: strin
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   )
 }

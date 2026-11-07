@@ -79,7 +79,16 @@ export function MonthPlanSheet(props: {
           disabled={busy || income === null}
           onClick={() =>
             run(
-              () => supabase.from('month_plans').upsert({ month: props.month, income: income ?? 0, savings: savings ?? 0 }),
+              async () => {
+                // Tháng mới: mang theo kiểu ngày tùy chỉnh của tháng gần nhất (V13-4)
+                const prev = props.initial
+                  ? null
+                  : (await supabase.from('month_plans').select('day_kinds').lt('month', props.month).order('month', { ascending: false }).limit(1).maybeSingle())
+                      .data
+                return supabase
+                  .from('month_plans')
+                  .upsert({ month: props.month, income: income ?? 0, savings: savings ?? 0, ...(prev ? { day_kinds: prev.day_kinds } : {}) })
+              },
               'Đã lưu kế hoạch tháng',
               props.onClose,
             )
