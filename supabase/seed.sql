@@ -1,0 +1,2 @@
+-- Dữ liệu mẫu cho Supabase local (chạy sau migration khi `supabase db reset`).
+-- Người dùng mới được tạo dữ liệu mặc định bằng trigger, nên hiện chưa cần seed gì.

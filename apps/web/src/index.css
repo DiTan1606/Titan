@@ -1,0 +1,90 @@
+@import '@fontsource/be-vietnam-pro/vietnamese-400.css';
+@import '@fontsource/be-vietnam-pro/vietnamese-500.css';
+@import '@fontsource/be-vietnam-pro/vietnamese-600.css';
+@import '@fontsource/be-vietnam-pro/vietnamese-700.css';
+@import '@fontsource/be-vietnam-pro/vietnamese-800.css';
+@import '@fontsource/be-vietnam-pro/latin-400.css';
+@import '@fontsource/be-vietnam-pro/latin-500.css';
+@import '@fontsource/be-vietnam-pro/latin-600.css';
+@import '@fontsource/be-vietnam-pro/latin-700.css';
+@import '@fontsource/be-vietnam-pro/latin-800.css';
+@import 'tailwindcss';
+
+/*
+ * Titan design system — docs/06-thiet-ke-giao-dien.md
+ * Màu chính: xanh ngọc (brand). Trung tính ấm (ink). Vàng cam chỉ dùng cho "cần chú ý" (attn).
+ * Nút & thẻ "nổi khối": viền dưới dày đậm hơn một tông, nhấn xuống thì lún (btn-3d).
+ */
+@theme {
+  --font-sans: 'Be Vietnam Pro', ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  --color-brand-50: #e1f5ee;
+  --color-brand-100: #c2ecdd;
+  --color-brand-200: #9fe1cb;
+  --color-brand-300: #5dcaa5;
+  --color-brand-400: #1d9e75;
+  --color-brand-500: #168a66;
+  --color-brand-600: #0f6e56;
+  --color-brand-700: #0b5c48;
+  --color-brand-800: #085041;
+  --color-brand-900: #04342c;
+
+  --color-ink-50: #f7f6f2;
+  --color-ink-100: #efede6;
+  --color-ink-200: #e2e0d8;
+  --color-ink-300: #cfcdc4;
+  --color-ink-400: #a8a69d;
+  --color-ink-500: #888780;
+  --color-ink-600: #5f5e5a;
+  --color-ink-700: #444441;
+  --color-ink-800: #2c2c2a;
+  --color-ink-900: #1c1c1a;
+
+  --color-attn-50: #faeeda;
+  --color-attn-200: #fac775;
+  --color-attn-400: #ef9f27;
+  --color-attn-600: #854f0b;
+  --color-attn-800: #633806;
+
+  --color-income: #1d9e75;
+
+  --radius-card: 1.25rem;
+  --radius-pill: 999px;
+
+  --animate-shake: shake 0.4s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { translate: 0; }
+  20%, 60% { translate: -8px; }
+  40%, 80% { translate: 8px; }
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  @apply bg-ink-50 font-sans text-ink-900 antialiased;
+  -webkit-tap-highlight-color: transparent;
+  /* chừa chỗ cho tai thỏ / thanh home trên iPhone khi chạy dạng PWA */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+}
+
+/* Số tiền: chữ số đều chiều rộng để không "nhảy" khi đếm */
+.num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+@layer components {
+  /* Nút nổi khối kiểu Duolingo: viền dưới 4px, nhấn xuống thì lún 4px */
+  .btn-3d {
+    @apply select-none border-b-4 transition-[transform,border-width] duration-75 active:translate-y-[3px] active:border-b-[1px] disabled:active:translate-y-0 disabled:active:border-b-4;
+  }
+  .card {
+    @apply rounded-[var(--radius-card)] border-2 border-b-4 border-ink-100 bg-white;
+  }
+}

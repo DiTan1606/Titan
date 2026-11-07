@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Nền tràn viền: iOS / Android tự bo góc. Nội dung chính nằm trong vùng an toàn 80% ở giữa. -->
+  <rect width="1024" height="1024" fill="#171717"/>
+  <!-- Chữ T hình học -->
+  <rect x="262" y="286" width="500" height="128" rx="40" fill="#ffffff"/>
+  <rect x="448" y="286" width="128" height="470" rx="40" fill="#ffffff"/>
+  <!-- Đồng xu: tiền được giữ lại -->
+  <circle cx="704" cy="690" r="92" fill="#10b981"/>
+  <circle cx="704" cy="690" r="52" fill="none" stroke="#171717" stroke-width="18"/>
+</svg>
