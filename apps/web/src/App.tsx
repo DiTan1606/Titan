@@ -2,6 +2,7 @@ import type { Session } from '@supabase/supabase-js'
 import { useQueryClient } from '@tanstack/react-query'
 import { motion } from 'motion/react'
 import { useEffect, useState } from 'react'
+import { DigestScreen } from './features/digest/DigestScreen'
 import { HomeScreen } from './features/home/HomeScreen'
 import { Onboarding } from './features/onboarding/Onboarding'
 import { SignIn } from './features/onboarding/SignIn'
@@ -16,6 +17,15 @@ import { supabase } from './lib/supabase'
 import { Sheet } from './ui/Sheet'
 import { TabBar, type Tab } from './ui/TabBar'
 import { ToastProvider } from './ui/Toast'
+
+// Mở từ thông báo: /?screen=digest (tổng kết 20:00), /?tab=plan, /?tab=plan&recap=prev (ngày 1).
+// Đọc một lần khi nạp app (không đọc trong render: StrictMode chạy 2 lần, lần sau URL đã bị xóa).
+const LAUNCH = (() => {
+  const p = new URLSearchParams(window.location.search)
+  const launch = { tab: p.get('tab'), screen: p.get('screen'), recap: p.get('recap') }
+  if (launch.tab || launch.screen) window.history.replaceState(null, '', '/')
+  return launch
+})()
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null)
@@ -40,8 +50,10 @@ export default function App() {
 function SignedIn() {
   const profile = useProfile()
   const pending = usePendingCount()
-  const [tab, setTab] = useState<Tab>('home')
+  const launch = LAUNCH
+  const [tab, setTab] = useState<Tab>(launch.tab === 'plan' ? 'plan' : 'home')
   const [adding, setAdding] = useState(false)
+  const [digest, setDigest] = useState(launch.screen === 'digest')
 
   // Bản cài mới (xóa icon rồi thêm lại) → tự đăng ký lại thông báo nếu đã cho phép
   useEffect(() => {
@@ -67,15 +79,29 @@ function SignedIn() {
               onOpenReview={() => setTab('review')}
               onOpenTransactions={() => setTab('transactions')}
               onOpenPlan={() => setTab('plan')}
+              onOpenDigest={() => setDigest(true)}
             />
           )}
           {tab === 'transactions' && <TransactionsScreen onOpenReview={() => setTab('review')} />}
           {tab === 'review' && <ReviewScreen />}
-          {tab === 'plan' && <PlanScreen />}
+          {tab === 'plan' && <PlanScreen openRecap={launch.recap === 'prev' ? 'prev' : undefined} />}
           {tab === 'me' && <SettingsScreen />}
         </motion.main>
 
       <TabBar tab={tab} onTab={setTab} onAdd={() => setAdding(true)} reviewBadge={pending.data} />
+
+      <Sheet open={digest} onClose={() => setDigest(false)} title="Tổng kết hôm nay">
+        <DigestScreen
+          onOpenReview={() => {
+            setDigest(false)
+            setTab('review')
+          }}
+          onForgot={() => {
+            setDigest(false)
+            setAdding(true)
+          }}
+        />
+      </Sheet>
 
       <Sheet open={adding} onClose={() => setAdding(false)} title="Ghi nhanh">
         <QuickEntry onSaved={() => setAdding(false)} />

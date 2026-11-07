@@ -434,3 +434,6 @@ enabled = true
 # Phím tắt iPhone không có JWT Supabase → tự xác thực bằng x-titan-token
 [functions.ingest-sms]
 verify_jwt = false
+
+[functions.cron-notify]
+verify_jwt = false

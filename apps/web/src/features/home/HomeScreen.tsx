@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { CalendarRange, ChevronRight, Inbox, Landmark, Wallet } from 'lucide-react'
+import { CalendarRange, ChevronRight, Inbox, Landmark, MoonStar, Wallet } from 'lucide-react'
 import { motion } from 'motion/react'
 import { createElement, useState } from 'react'
 import { TransactionRow } from '../../components/TransactionRow'
@@ -14,7 +14,7 @@ import {
   useWallets,
   visibleWallets,
 } from '../../lib/data'
-import { DAY_LABEL, type DayKind } from '../../lib/budget'
+import { DAY_LABEL, type DayKind } from '@shared/budget.ts'
 import { useVnDays } from '../../lib/useVnDays'
 import { DAY_ICON, setDayKind } from '../plan/dayKind'
 import { formatVnd } from '../../lib/format'
@@ -33,7 +33,7 @@ const rise = (i: number) => ({
 })
 
 // Trang chủ: lời chào + câu cà khịa → "Hôm nay còn được tiêu" (có kế hoạch) hoặc "Hôm nay đã chi" → chờ duyệt → ví → gần đây
-export function HomeScreen(props: { onOpenReview: () => void; onOpenTransactions: () => void; onOpenPlan: () => void }) {
+export function HomeScreen(props: { onOpenReview: () => void; onOpenTransactions: () => void; onOpenPlan: () => void; onOpenDigest: () => void }) {
   const profile = useProfile()
   const wallets = useWallets()
   const stats = useSpendingStats()
@@ -149,9 +149,28 @@ export function HomeScreen(props: { onOpenReview: () => void; onOpenTransactions
         </motion.button>
       )}
 
+      {hour >= 18 && (
+        <motion.button
+          {...rise(2)}
+          type="button"
+          onClick={props.onOpenDigest}
+          whileTap={{ scale: 0.98 }}
+          className="btn-3d flex items-center gap-3 rounded-[1.25rem] border-2 border-b-4 border-[#CECBF6] bg-[#EEEDFE] p-4 text-left"
+        >
+          <span className="grid size-11 place-items-center rounded-2xl bg-[#7F77DD] text-white">
+            <MoonStar size={22} strokeWidth={2.4} />
+          </span>
+          <span className="flex-1">
+            <span className="block font-extrabold text-[#3C3489]">Tổng kết hôm nay</span>
+            <span className="block text-sm text-[#534AB7]">Xem kết quả ngày và đếm lại ví</span>
+          </span>
+          <ChevronRight className="text-[#534AB7]" />
+        </motion.button>
+      )}
+
       <motion.section {...rise(3)} className="grid grid-cols-2 gap-3">
         {shown.map((w) => (
-          <div key={w.id} className="card p-4">
+          <button key={w.id} type="button" onClick={props.onOpenDigest} className="card p-4 text-left active:scale-[0.98]">
             <span
               className={`grid size-9 place-items-center rounded-xl ${w.kind === 'bank' ? 'bg-brand-50 text-brand-500' : 'bg-[#EAF3DE] text-[#3B6D11]'}`}
             >
@@ -159,7 +178,7 @@ export function HomeScreen(props: { onOpenReview: () => void; onOpenTransactions
             </span>
             <p className="mt-3 text-xs font-bold text-ink-500">{w.kind === 'bank' ? 'VCB' : 'Tiền mặt'}</p>
             <AnimatedVnd value={w.balance} className="text-lg font-extrabold text-ink-900" />
-          </div>
+          </button>
         ))}
       </motion.section>
 

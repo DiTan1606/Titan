@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computePlan, monthDays, type PlanInput, spentByParent } from './budget'
+import { computePlan, monthDays, type PlanInput, spentByParent } from './budget.ts'
 
 // Tháng 11/2026 có 30 ngày
 const base: PlanInput = {

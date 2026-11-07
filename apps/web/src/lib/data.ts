@@ -1,7 +1,8 @@
 // Truy vấn dữ liệu dùng chung (TanStack Query). RLS đảm bảo chỉ thấy dữ liệu của người đăng nhập.
 import { vnDate } from '@shared/quick-entry.ts'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { computePlan, type DayKind, monthStart, type Spend } from './budget'
+import { computePlan, type DayKind, monthDays, monthStart, type Spend } from '@shared/budget.ts'
+import { buildRecap, type RecapTxn } from '@shared/recap.ts'
 import { supabase } from './supabase'
 
 export type Wallet = {
@@ -49,10 +50,11 @@ export function useProfile() {
   return useQuery({
     queryKey: ['profile'],
     queryFn: async () =>
-      throwIf(await supabase.from('profiles').select('id, display_name, onboarded_at').single()) as {
+      throwIf(await supabase.from('profiles').select('id, display_name, onboarded_at, settings').single()) as {
         id: string
         display_name: string | null
         onboarded_at: string | null
+        settings: Record<string, unknown>
       },
   })
 }
@@ -454,4 +456,138 @@ export async function ensureSubcategory(parent: Category, name: string, existing
     .single()
   if (error) throw new Error(error.message)
   return data.id
+}
+
+// ─────────────────────────────────────────────────────────────
+// v1.2 · Tổng kết cuối ngày, đối soát
+// ─────────────────────────────────────────────────────────────
+
+/** Ví đã đối soát hôm nay (để hiện ✓ trên màn Tổng kết) */
+export function useReconciledToday() {
+  return useQuery({
+    queryKey: ['transactions', 'reconciled-today'],
+    queryFn: async () => {
+      const { start } = todayRange()
+      const rows = throwIf(await supabase.from('reconciliations').select('wallet_id').gte('created_at', start)) ?? []
+      return new Set(rows.map((r) => r.wallet_id as string))
+    },
+  })
+}
+
+/** Hôm nay có giao dịch nào dùng tiền mặt không (BRD P8: chỉ hỏi đối soát khi có dùng) */
+export function useCashUsedToday(cashWalletId: string | undefined) {
+  return useQuery({
+    queryKey: ['transactions', 'cash-today', cashWalletId],
+    enabled: !!cashWalletId,
+    queryFn: async () => {
+      const { start, end } = todayRange()
+      const { count, error } = await supabase
+        .from('transactions')
+        .select('id', { count: 'exact', head: true })
+        .is('deleted_at', null)
+        .or(`wallet_id.eq.${cashWalletId},to_wallet_id.eq.${cashWalletId}`)
+        .gte('occurred_at', start)
+        .lt('occurred_at', end)
+      if (error) throw new Error(error.message)
+      return (count ?? 0) > 0
+    },
+  })
+}
+
+/** Tháng liền trước của "YYYY-MM-01" */
+export function prevMonth(month: string): string {
+  const [y, m] = month.split('-').map(Number)
+  return m === 1 ? `${y - 1}-12-01` : `${y}-${String(m - 1).padStart(2, '0')}-01`
+}
+
+const monthRange = (month: string) => {
+  const start = new Date(`${month}T00:00:00+07:00`)
+  const end = new Date(start)
+  end.setMonth(end.getMonth() + 1)
+  return { start: start.toISOString(), end: end.toISOString() }
+}
+
+/** V12-7 · Dữ liệu recap của một tháng (đã kết thúc hoặc tính đến hôm nay) */
+export function useRecap(month: string | null, today: string) {
+  return useQuery({
+    queryKey: ['transactions', 'recap', month, today],
+    enabled: !!month,
+    queryFn: async () => {
+      const m = month!
+      const cur = monthRange(m)
+      const prev = monthRange(prevMonth(m))
+      const end = new Date(`${m}T00:00:00Z`)
+      end.setUTCMonth(end.getUTCMonth() + 1)
+      const [rows, prevRows, cats, plan, recurring, days, funds] = await Promise.all([
+        supabase
+          .from('transactions')
+          .select('amount, occurred_at, merchant, description, category_id, category:categories(name, parent_id)')
+          .is('deleted_at', null)
+          .in('type', ['expense', 'borrow'])
+          .gte('occurred_at', cur.start)
+          .lt('occurred_at', cur.end),
+        supabase
+          .from('transactions')
+          .select('amount')
+          .is('deleted_at', null)
+          .in('type', ['expense', 'borrow'])
+          .gte('occurred_at', prev.start)
+          .lt('occurred_at', prev.end),
+        supabase.from('categories').select('id, name'),
+        supabase.from('month_plans').select('income, savings, created_at').eq('month', m).maybeSingle(),
+        supabase.from('recurring_items').select('id, name, amount, due_day, category_id').eq('active', true),
+        supabase.from('day_plans').select('day, kind').gte('day', m).lt('day', end.toISOString().slice(0, 10)),
+        supabase.from('fund_balances').select('name, target, balance'),
+      ])
+      const catName = new Map((throwIf(cats) ?? []).map((c) => [c.id as string, c.name as string]))
+      const raw = (throwIf(rows) ?? []) as unknown as {
+        amount: number
+        occurred_at: string
+        merchant: string | null
+        description: string | null
+        category_id: string | null
+        category: { name: string; parent_id: string | null } | null
+      }[]
+      const txns: RecapTxn[] = raw.map((r) => ({
+        date: vnDate(new Date(r.occurred_at)),
+        amount: Number(r.amount),
+        groupName: r.category ? (r.category.parent_id ? (catName.get(r.category.parent_id) ?? r.category.name) : r.category.name) : null,
+        merchant: r.merchant,
+        description: r.description,
+      }))
+      const spends: Spend[] = raw.map((r, i) => ({
+        date: txns[i].date,
+        amount: txns[i].amount,
+        categoryId: r.category_id,
+        parentId: r.category?.parent_id ?? null,
+      }))
+
+      const p = throwIf(plan)
+      let surplus: number | null = null
+      if (p) {
+        const partial = today.slice(0, 7) === m.slice(0, 7)
+        const day = partial ? today : monthDays(m).at(-1)!
+        const r = computePlan({
+          today: day,
+          income: Number(p.income),
+          savings: Number(p.savings),
+          fixed: (throwIf(recurring) ?? []).map((x) => ({ id: x.id, name: x.name, amount: Number(x.amount), dueDay: x.due_day, categoryId: x.category_id })),
+          spends,
+          dayKinds: Object.fromEntries((throwIf(days) ?? []).map((d) => [d.day, d.kind as DayKind])),
+          startDay: vnDate(new Date(p.created_at)),
+        })
+        // Tháng đã xong: cộng cả kết quả ngày cuối
+        surplus = partial ? r.surplus : r.surplus + r.todayLeft
+      }
+
+      return buildRecap({
+        month: m,
+        today,
+        txns,
+        prevTotal: (throwIf(prevRows) ?? []).reduce((s, r) => s + Number(r.amount), 0),
+        surplus,
+        funds: (throwIf(funds) ?? []).map((f) => ({ name: f.name, balance: Number(f.balance), target: f.target === null ? null : Number(f.target) })),
+      })
+    },
+  })
 }

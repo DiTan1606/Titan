@@ -1,9 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { Check, ChevronRight, Pencil, Plus, Sparkles } from 'lucide-react'
+import { Check, ChevronRight, Pencil, Plus, Sparkles, Clapperboard } from 'lucide-react'
 import { motion } from 'motion/react'
 import { createElement, useState } from 'react'
-import { DAY_LABEL, type DayKind, spentByParent } from '../../lib/budget'
-import { type Category, type RecurringItem, useCategories, useCategoryBudgets, usePlan, useRecurringItems, useRefreshMoney } from '../../lib/data'
+import { DAY_LABEL, type DayKind, spentByParent } from '@shared/budget.ts'
+import { type Category, prevMonth, type RecurringItem, useCategories, useCategoryBudgets, usePlan, useRecurringItems, useRefreshMoney } from '../../lib/data'
 import { formatVnd } from '../../lib/format'
 import { useVnDays } from '../../lib/useVnDays'
 import { AnimatedVnd } from '../../ui/AnimatedNumber'
@@ -11,11 +11,12 @@ import { Button } from '../../ui/Button'
 import { CategoryIcon } from '../../ui/CategoryIcon'
 import { useToast } from '../../ui/toast-context'
 import { DAY_ICON, DAY_STYLE, NEXT_KIND, setDayKind, WEEKDAY } from './dayKind'
+import { RecapStory } from '../recap/RecapStory'
 import { FundsSection } from './FundsSection'
 import { BudgetSheet, MonthPlanSheet, RecurringSheet } from './PlanSheets'
 
 // V11 · Tab Kế hoạch
-export function PlanScreen() {
+export function PlanScreen(props: { openRecap?: 'prev' }) {
   const { today } = useVnDays()
   const { month, ready, plan, result, spends } = usePlan(today)
   const recurring = useRecurringItems()
@@ -27,6 +28,7 @@ export function PlanScreen() {
   const [editingPlan, setEditingPlan] = useState(false)
   const [editingItem, setEditingItem] = useState<RecurringItem | 'new' | null>(null)
   const [budgetFor, setBudgetFor] = useState<Category | null>(null)
+  const [recapMonth, setRecapMonth] = useState<string | null>(props.openRecap === 'prev' ? prevMonth(`${today.slice(0, 7)}-01`) : null)
 
   const cats = categories.data ?? []
   const activeFixed = (recurring.data ?? []).filter((r) => r.active)
@@ -244,6 +246,28 @@ export function PlanScreen() {
       </section>
 
       <FundsSection />
+
+      <section className="card flex items-center gap-3 p-4">
+        <span className="grid size-11 place-items-center rounded-2xl bg-[#EEEDFE] text-[#534AB7]">
+          <Clapperboard size={22} strokeWidth={2.4} />
+        </span>
+        <div className="flex-1">
+          <h2 className="font-extrabold">Recap tháng</h2>
+          <p className="text-sm text-ink-500">Nhìn lại tháng kiểu story</p>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Button size="sm" variant="soft" onClick={() => setRecapMonth(month)}>
+            {monthLabel} tới giờ
+          </Button>
+          {Number(today.slice(8, 10)) <= 10 && (
+            <Button size="sm" onClick={() => setRecapMonth(prevMonth(month))}>
+              Tháng {Number(prevMonth(month).slice(5, 7))}
+            </Button>
+          )}
+        </div>
+      </section>
+
+      <RecapStory month={recapMonth} onClose={() => setRecapMonth(null)} />
 
       <MonthPlanSheet key={plan ? 'edit' : 'new'} open={editingPlan} onClose={() => setEditingPlan(false)} month={month} initial={plan} fixedTotal={fixedTotal} />
       <RecurringSheet item={editingItem} categories={cats} onClose={() => setEditingItem(null)} onCreatedCategory={refresh} />

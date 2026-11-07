@@ -1,6 +1,6 @@
 // Kiểu ngày (V11-4): icon, màu, thứ tự chạm để đổi, lưu xuống DB
 import { House, type LucideIcon, PartyPopper, Smile, UtensilsCrossed } from 'lucide-react'
-import type { DayKind } from '../../lib/budget'
+import type { DayKind } from '@shared/budget.ts'
 import { supabase } from '../../lib/supabase'
 
 export const DAY_ICON: Record<DayKind, LucideIcon> = { home: House, normal: Smile, fancy: UtensilsCrossed, party: PartyPopper }

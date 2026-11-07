@@ -9,10 +9,11 @@
 - 📥 **Duyệt bằng cách vuốt**: phải = đúng · trái = sửa · lên = không phải chi tiêu (chuyển khoản, trả nợ, thu nợ…)
 - ✍️ **Ghi nhanh tiền mặt** bằng một dòng: `bánh mì: 20k; trà sữa: 45k`, lệnh `/hôm qua`, `/ngày 03/11`, `/vcb`, `/thu`, `@Minh` (được trả hộ)
 - 🗓️ **Kế hoạch tháng** (v1.1): khoản cố định tự cấu hình · tiết kiệm trước · **"Hôm nay còn được tiêu"** chia theo kiểu ngày (ở nhà / bình thường / đi ăn sang / tiệc) · hũ dư · ngân sách danh mục · quỹ kiểu MoMo
+- 🌙 **Tổng kết cuối ngày** (v1.2): đếm tờ tiền trong ví để đối soát, đối soát số dư VCB · thông báo 20:00 và nhắc khoản cố định đến hạn · 🎬 **Recap tháng** kiểu story
 - 🔁 Nhận diện **chuyển tiền giữa các tài khoản của chính mình** — không tính vào thu chi
 - 🔔 Thông báo đẩy trên iPhone · 🗑️ Thùng rác 30 ngày · 💸 Chi phí vận hành **0đ**
 
-> **v1.1 – Kế hoạch chi tiêu** ([ghi chú phát hành](docs/releases/v1.1.0.md)). Lộ trình các bản sau ở [docs/07](docs/07-v1.1-ke-hoach-chi-tieu.md) và [BRD mục 11](docs/01-dac-ta-nghiep-vu.md#11-danh-sách-tính-năng-và-lộ-trình).
+> **v1.2 – Tổng kết, đối soát, recap** ([ghi chú phát hành](docs/releases/v1.2.0.md)). Thiết kế ở [docs/07](docs/07-v1.1-ke-hoach-chi-tieu.md), [docs/08](docs/08-v1.2-tong-ket-doi-soat.md) và [BRD mục 11](docs/01-dac-ta-nghiep-vu.md#11-danh-sách-tính-năng-và-lộ-trình).
 
 ## Kiến trúc
 
@@ -57,6 +58,7 @@ flowchart LR
 | 05 | [Checklist kiểm thử v1.0](docs/05-kiem-thu-v1.md) |
 | 06 | [Thiết kế giao diện](docs/06-thiet-ke-giao-dien.md) |
 | 07 | [v1.1 – Kế hoạch chi tiêu](docs/07-v1.1-ke-hoach-chi-tieu.md) |
+| 08 | [v1.2 – Tổng kết, đối soát, recap](docs/08-v1.2-tong-ket-doi-soat.md) |
 | — | [Ghi chú phát hành](docs/releases/) |
 
 ## Chạy local
@@ -76,8 +78,8 @@ pnpm functions:serve                                        # (terminal khác) E
 ## Kiểm thử
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm test   # TypeScript, lint, 146 unit test
-pnpm test:db                               # 8 file test database: RLS, số dư, ghi nhớ quán, bảo mật
+pnpm typecheck && pnpm lint && pnpm test   # TypeScript, lint, 160 unit test
+pnpm test:db                               # 9 file test database: RLS, số dư, ghi nhớ quán, bảo mật
 pnpm test:ingest                           # 31 kiểm tra tích hợp API nhận email/SMS
 ```
 
@@ -90,7 +92,10 @@ supabase db push --remote                               # migration
 supabase functions deploy ingest-sms --no-verify-jwt    # xác thực bằng token riêng
 supabase functions deploy suggest-category
 supabase functions deploy push-test
+supabase functions deploy cron-notify --no-verify-jwt   # xác thực bằng CRON_SECRET
 ```
+Thông báo hẹn giờ (v1.2) cần thêm secret `CRON_SECRET` cho Edge Functions và 2 secret trong Vault (`titan_functions_url`, `titan_cron_secret`) để pg_cron gọi được `cron-notify`, xem [docs/08](docs/08-v1.2-tong-ket-doi-soat.md).
+
 Web: push lên `main` → Vercel tự deploy. Icon: sửa `apps/web/icons/icon.svg` rồi `pnpm icons`.
 
 ## Cấu trúc
