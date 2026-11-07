@@ -63,11 +63,12 @@ function SignedIn() {
   const launch = LAUNCH
   const [tab, setTab] = useState<Tab>(launch.tab === 'plan' || launch.tab === 'me' ? launch.tab : 'home')
   // Ghi nhanh mở từ tab VCB / Tiền mặt trên Trang chủ → ghi thẳng vào ví đó
-  const [adding, setAdding] = useState<'bank' | 'cash' | null>(null)
-  const [addKind, setAddKind] = useState<'bank' | 'cash'>('cash') // giữ nguyên nội dung khi bảng đang trượt xuống
-  const openAdd = (kind: 'bank' | 'cash') => {
-    setAddKind(kind)
-    setAdding(kind)
+  const [adding, setAdding] = useState(false)
+  // Ví + loại (chi / thu) của lần ghi; giữ nguyên nội dung khi bảng đang trượt xuống
+  const [addReq, setAddReq] = useState<{ wallet: 'bank' | 'cash'; type: 'expense' | 'income' }>({ wallet: 'cash', type: 'expense' })
+  const openAdd = (wallet: 'bank' | 'cash', type: 'expense' | 'income' = 'expense') => {
+    setAddReq({ wallet, type })
+    setAdding(true)
   }
   const [digest, setDigest] = useState(launch.screen === 'digest')
 
@@ -118,8 +119,12 @@ function SignedIn() {
         />
       </Sheet>
 
-      <Sheet open={!!adding} onClose={() => setAdding(null)} title={addKind === 'bank' ? 'Ghi nhanh · VCB' : 'Ghi nhanh · Tiền mặt'}>
-        <QuickEntry key={addKind} wallet={addKind} onSaved={() => setAdding(null)} />
+      <Sheet
+        open={adding}
+        onClose={() => setAdding(false)}
+        title={`${addReq.type === 'income' ? 'Ghi thu' : 'Ghi chi'} · ${addReq.wallet === 'bank' ? 'VCB' : 'Tiền mặt'}`}
+      >
+        <QuickEntry key={`${addReq.wallet}-${addReq.type}`} wallet={addReq.wallet} type={addReq.type} onSaved={() => setAdding(false)} />
       </Sheet>
     </div>
   )

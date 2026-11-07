@@ -665,7 +665,8 @@ export function useCashBills(wallet: Wallet | undefined) {
             .from('transactions')
             .select('cash_bills')
             .is('deleted_at', null)
-            .eq('wallet_id', wallet!.id)
+            // rút ATM: ví tiền mặt là ví nhận (to_wallet_id); cash_bills luôn là thay đổi của ví tiền mặt
+            .or(`wallet_id.eq.${wallet!.id},to_wallet_id.eq.${wallet!.id}`)
             .not('cash_bills', 'is', null)
             .gt('created_at', last.created_at),
         ) ?? []

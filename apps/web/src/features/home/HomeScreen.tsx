@@ -9,6 +9,7 @@ import { AnimatedVnd } from '../../ui/AnimatedNumber'
 import { PushBanner } from '../push/PushBanner'
 import { CashTab } from './CashTab'
 import { DailyBar } from './DailyBar'
+import type { EntryType } from './QuickAddBar'
 import { DayKindMenu } from './DayKindMenu'
 import { VcbTab } from './VcbTab'
 
@@ -27,7 +28,7 @@ type WalletTab = 'bank' | 'cash'
  * Trang chủ v1.3 (V13-1): cố định một màn, không cuộn.
  * Xin chào + câu cà khịa → "Hôm nay còn được tiêu" (nút kiểu ngày cùng hàng) → thẻ lớn 2 tab VCB / Tiền mặt.
  */
-export function HomeScreen(props: { onOpenPlan: () => void; onOpenDigest: () => void; onAdd: (wallet: WalletTab) => void }) {
+export function HomeScreen(props: { onOpenPlan: () => void; onOpenDigest: () => void; onAdd: (wallet: WalletTab, type: EntryType) => void }) {
   const profile = useProfile()
   const wallets = useWallets()
   const stats = useSpendingStats()
@@ -104,9 +105,9 @@ export function HomeScreen(props: { onOpenPlan: () => void; onOpenDigest: () => 
         </div>
         <div className="flex min-h-0 flex-1 flex-col pt-2.5">
           {tab === 'bank' ? (
-            <VcbTab wallet={bank} onAdd={() => props.onAdd('bank')} />
+            <VcbTab wallet={bank} onAdd={(t) => props.onAdd('bank', t)} />
           ) : (
-            <CashTab wallet={cash} onAdd={() => props.onAdd('cash')} />
+            <CashTab wallet={cash} onAdd={(t) => props.onAdd('cash', t)} />
           )}
         </div>
       </motion.section>

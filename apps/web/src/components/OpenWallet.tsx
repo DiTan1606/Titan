@@ -19,9 +19,12 @@ const LEATHER = {
  */
 export function OpenWallet({ counts, className }: { counts: BillCounts; className?: string }) {
   const clip = useId()
-  const bills = BILLS.filter((b) => (counts[b.value] ?? 0) > 0).slice(0, 6)
+  // Đủ cả 9 mệnh giá: nhiều loại thì tờ hẹp lại, xòe rộng hơn để góc nào cũng thấy mệnh giá
+  const bills = BILLS.filter((b) => (counts[b.value] ?? 0) > 0)
   const n = bills.length
-  const spread = n > 1 ? Math.min(64, 13 * (n - 1)) : 0
+  const spread = n > 1 ? Math.min(n > 6 ? 80 : 64, (n > 6 ? 10 : 13) * (n - 1)) : 0
+  const w = n > 6 ? 54 : 68
+  const font = n > 6 ? 11.5 : 13.5
 
   return (
     <svg viewBox="0 10 320 236" className={className} role="img" aria-label={n ? 'Ví tiền mặt' : 'Ví trống'}>
@@ -49,14 +52,14 @@ export function OpenWallet({ counts, className }: { counts: BillCounts; classNam
               animate={{ y: 0 }}
               transition={{ delay: 0.08 * i, type: 'spring', damping: 15, stiffness: 170 }}
             >
-              <g transform={`translate(160 236) rotate(${angle}) translate(-34 -196)`}>
-                <rect width="68" height="160" rx="7" fill={b.bg} stroke={b.fg} strokeWidth="2.5" />
-                <rect x="5" y="5" width="58" height="150" rx="4" fill="none" stroke={b.fg} strokeOpacity="0.35" strokeWidth="1.5" />
-                <circle cx="34" cy="70" r="16" fill={b.fg} fillOpacity="0.15" />
-                <text x="7" y="23" fill={b.fg} fontSize="13.5" fontWeight="800" fontFamily="inherit">
+              <g transform={`translate(160 236) rotate(${angle}) translate(${-w / 2} -196)`}>
+                <rect width={w} height="160" rx="7" fill={b.bg} stroke={b.fg} strokeWidth="2.5" />
+                <rect x="5" y="5" width={w - 10} height="150" rx="4" fill="none" stroke={b.fg} strokeOpacity="0.35" strokeWidth="1.5" />
+                <circle cx={w / 2} cy="70" r="14" fill={b.fg} fillOpacity="0.15" />
+                <text x="6" y="22" fill={b.fg} fontSize={font} fontWeight="800" fontFamily="inherit">
                   {b.label}
                 </text>
-                <text x="7" y="39" fill={b.fg} fontSize="12" fontWeight="800" fontFamily="inherit" fillOpacity="0.8">
+                <text x="6" y="37" fill={b.fg} fontSize={font - 1.5} fontWeight="800" fontFamily="inherit" fillOpacity="0.8">
                   ×{counts[b.value]}
                 </text>
               </g>

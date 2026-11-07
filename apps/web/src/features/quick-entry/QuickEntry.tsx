@@ -18,7 +18,16 @@ type Draft = { description: string; amount: number; categoryId: string | null }
 
 // BRD P3 · Ghi nhanh: "bánh mì: 20k; mì tôm: 12k" + lệnh "/" + "@tên" + hàng nút chọn nhanh
 /** `wallet`: ghi thẳng vào ví này (Trang chủ, tab VCB / Tiền mặt), ẩn nút chọn VCB */
-export function QuickEntry({ onSaved, wallet: fixedWallet }: { onSaved?: () => void; wallet?: 'bank' | 'cash' }) {
+export function QuickEntry({
+  onSaved,
+  wallet: fixedWallet,
+  type: fixedType,
+}: {
+  onSaved?: () => void
+  wallet?: 'bank' | 'cash'
+  /** V13-18: mở từ nút Ghi chi / Ghi thu → loại cố định, ẩn nút đổi loại */
+  type?: 'expense' | 'income'
+}) {
   const [text, setText] = useState('')
   const [step, setStep] = useState<'type' | 'review'>('type')
   const [drafts, setDrafts] = useState<Draft[]>([])
@@ -36,9 +45,13 @@ export function QuickEntry({ onSaved, wallet: fixedWallet }: { onSaved?: () => v
   const inWallet = useCashBills(cashWallet)
 
   const parsed = useMemo(() => {
-    const p = parseQuickEntry(text)
-    return fixedWallet ? { ...p, wallet: fixedWallet } : p
-  }, [text, fixedWallet])
+    let p = parseQuickEntry(text)
+    if (fixedWallet) p = { ...p, wallet: fixedWallet }
+    // Ghi thu: luôn là thu. Ghi chi: chi, hoặc "được trả hộ" (@tên) vì đó cũng là khoản chi của mình
+    if (fixedType === 'income') p = { ...p, type: 'income', counterparty: null }
+    if (fixedType === 'expense' && p.type === 'income') p = { ...p, type: 'expense' }
+    return p
+  }, [text, fixedWallet, fixedType])
   const canContinue = parsed.items.length > 0 && parsed.errors.length === 0
   const categoryKind = parsed.type === 'income' ? 'income' : 'expense'
   const total = parsed.items.reduce((s, i) => s + i.amount, 0)
@@ -188,17 +201,21 @@ export function QuickEntry({ onSaved, wallet: fixedWallet }: { onSaved?: () => v
           {isOtherDay ? parsed.date.split('-').reverse().slice(0, 2).join('/') : 'Ngày khác'}
           <input type="date" max={today} className="absolute size-0 opacity-0" onChange={(e) => setDate(e.target.value)} />
         </label>
-        <Chip active={parsed.type === 'borrow'} onClick={startBorrow} icon={<HandCoins size={16} />}>
-          Trả hộ
-        </Chip>
+        {fixedType !== 'income' && (
+          <Chip active={parsed.type === 'borrow'} onClick={startBorrow} icon={<HandCoins size={16} />}>
+            Trả hộ
+          </Chip>
+        )}
         {!fixedWallet && (
           <Chip active={parsed.wallet === 'bank'} onClick={() => toggleCommand('/vcb')} icon={<Landmark size={16} />}>
             VCB
           </Chip>
         )}
-        <Chip active={parsed.type === 'income'} onClick={() => toggleCommand('/thu')} icon={<PiggyBank size={16} />}>
-          Khoản thu
-        </Chip>
+        {!fixedType && (
+          <Chip active={parsed.type === 'income'} onClick={() => toggleCommand('/thu')} icon={<PiggyBank size={16} />}>
+            Khoản thu
+          </Chip>
+        )}
       </div>
 
       <textarea
@@ -209,7 +226,7 @@ export function QuickEntry({ onSaved, wallet: fixedWallet }: { onSaved?: () => v
         onKeyDown={(e) => {
           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && canContinue) next()
         }}
-        placeholder="bánh mì: 20k; trà sữa: 45k"
+        placeholder={fixedType === 'income' ? 'lương: 3tr; bán đồ cũ: 200k' : 'bánh mì: 20k; trà sữa: 45k'}
         className="w-full resize-none rounded-2xl border-2 border-ink-100 bg-ink-50 px-4 py-3 text-lg font-medium outline-none placeholder:text-ink-400 focus:border-brand-300 focus:bg-white"
       />
 
