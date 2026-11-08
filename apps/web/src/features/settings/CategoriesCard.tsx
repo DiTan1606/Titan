@@ -275,7 +275,7 @@ function CategoryEditor(props: { category: Category | null; kind: Kind; categori
         const n = c.name.trim()
         if (!n) continue
         if (!c.id) {
-          const { error } = await supabase.from('categories').insert({ kind: props.kind, name: n, parent_id: id })
+          const { error } = await supabase.from('categories').insert({ kind: props.kind, name: n, parent_id: id, sort_order: 900 })
           if (error) throw error
         } else if (n !== c.original) {
           const { error } = await supabase.from('categories').update({ name: n, hidden_at: null }).eq('id', c.id)

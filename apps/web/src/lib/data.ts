@@ -548,7 +548,7 @@ export async function ensureSubcategory(parent: Category, name: string, existing
   }
   const { data, error } = await supabase
     .from('categories')
-    .insert({ kind: parent.kind, name: clean, parent_id: parent.id })
+    .insert({ kind: parent.kind, name: clean, parent_id: parent.id, sort_order: 900 }) // chi tiết mới nằm cuối danh sách
     .select('id')
     .single()
   if (error) throw new Error(error.message)
