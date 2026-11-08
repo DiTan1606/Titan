@@ -1,8 +1,7 @@
 import { ArrowLeft, ArrowRight, ArrowUp } from 'lucide-react'
 import { motion, type PanInfo, useAnimationControls, useMotionValue, useTransform } from 'motion/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { CategoryPicker } from '../../components/CategoryPicker'
-import { TransactionRow } from '../../components/TransactionRow'
 import {
   type Category,
   confirmTransaction,
@@ -24,7 +23,7 @@ import { EditTransactionSheet } from './EditTransactionSheet'
 const THRESHOLD = 100 // px kéo đủ xa để tính là vuốt
 
 // BRD P4 · Duyệt: vuốt phải = đúng · vuốt trái = sửa · vuốt lên = không phải chi tiêu
-// v1.3: nằm trong tab VCB của Trang chủ, cao bằng phần còn trống. `empty` hiện khi đã duyệt hết.
+// v1.3: nằm trong tab VCB của Trang chủ. v1.4: thẻ nhỏ, lơ lửng giữa khung. `empty` hiện khi đã duyệt hết.
 export function ReviewDeck({ empty }: { empty: React.ReactNode }) {
   const pending = useTransactions({ status: 'pending', limit: 50 })
   const categories = useCategories()
@@ -79,10 +78,16 @@ export function ReviewDeck({ empty }: { empty: React.ReactNode }) {
       {!current && empty}
 
       {current && (
-        <>
-          {/* Thẻ cao vừa nội dung; xếp chồng nhẹ phía sau nếu còn thẻ */}
-          <div className="relative shrink-0 pb-1.5">
-            {queue[1] && <div className="card absolute inset-x-3 top-2 bottom-0 bg-ink-100" />}
+        // V14 · Thẻ duyệt nằm giữa khung, nhỏ gọn và lơ lửng như thẻ ngân hàng (FloatingBankCard)
+        <FitBox>
+          <motion.div
+            animate={{ y: [0, -6, 0] }}
+            transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+            className="relative w-full max-w-[330px]"
+          >
+            {/* còn thẻ phía sau thì xếp chồng nhẹ */}
+            {queue[2] && <div className="card absolute inset-x-6 -bottom-3 h-10 bg-ink-200/70" />}
+            {queue[1] && <div className="card absolute inset-x-3 -bottom-1.5 h-10 bg-ink-100" />}
             <SwipeCard
               key={current.id}
               onRight={() => approve(current)}
@@ -101,21 +106,17 @@ export function ReviewDeck({ empty }: { empty: React.ReactNode }) {
                 onApprove={() => approve(current)}
               />
             </SwipeCard>
-          </div>
-
-          {/* Các khoản đang chờ tiếp theo: lấp phần trống, chạm để sửa / duyệt ngay */}
-          {queue.length > 1 && (
-            <div className="flex min-h-0 flex-1 flex-col">
-              <p className="shrink-0 px-2 pt-1 text-xs font-extrabold tracking-wide text-ink-400 uppercase">Tiếp theo</p>
-              <ul className="min-h-0 flex-1 overflow-y-auto">
-                {queue.slice(1).map((t) => (
-                  <TransactionRow key={t.id} txn={t} categories={cats} onClick={() => setEditing(t)} />
-                ))}
-              </ul>
-            </div>
-          )}
-          {queue.length === 1 && <p className="px-2 pt-1 text-center text-xs font-semibold text-ink-400">Khoản cuối cùng rồi, vuốt phải là xong</p>}
-        </>
+          </motion.div>
+          {/* bóng đổ co giãn theo nhịp lơ lửng */}
+          <motion.span
+            animate={{ scaleX: [1, 0.85, 1], opacity: [0.14, 0.08, 0.14] }}
+            transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+            className="mt-5 block h-2.5 w-[55%] max-w-[220px] shrink-0 rounded-[50%] bg-black"
+          />
+          <p className="mt-2 shrink-0 text-center text-xs font-bold text-brand-600">
+            {queue.length === 1 ? 'Khoản cuối cùng rồi, vuốt phải là xong' : 'Vuốt phải: đúng · trái: sửa · lên: không phải chi'}
+          </p>
+        </FitBox>
       )}
 
       <EditTransactionSheet txn={editing} categories={cats} onClose={() => setEditing(null)} />
@@ -161,14 +162,14 @@ function CardBody(props: {
       </div>
 
       <div className="flex items-center gap-3">
-        <CategoryIcon category={cat} categories={categories} type={txn.type} size={44} />
+        <CategoryIcon category={cat} categories={categories} type={txn.type} size={38} />
         <div className="min-w-0 flex-1">
           <p className="truncate font-extrabold text-ink-900">{txn.description || 'Không có nội dung'}</p>
           <p className="truncate text-xs text-ink-500">
             {txn.counterparty ? `${out ? 'Tới' : 'Từ'} ${txn.counterparty}` : (cat?.name ?? 'Chưa phân loại')}
           </p>
         </div>
-        <p className={`num shrink-0 text-xl font-extrabold ${out ? 'text-ink-900' : txn.type === 'transfer' ? 'text-ink-500' : 'text-brand-500'}`}>
+        <p className={`num shrink-0 text-lg font-extrabold ${out ? 'text-ink-900' : txn.type === 'transfer' ? 'text-ink-500' : 'text-brand-500'}`}>
           {out ? '−' : txn.type === 'transfer' ? '': '+'}
           {formatVnd(txn.amount)}
         </p>
@@ -257,7 +258,7 @@ function SwipeCard(props: { children: React.ReactNode; onRight: () => Promise<bo
       animate={controls}
       initial={{ scale: 0.92, opacity: 0, y: 20 }}
       onDragEnd={onDragEnd}
-      className="card relative cursor-grab select-none active:cursor-grabbing"
+      className="card relative cursor-grab shadow-xl select-none active:cursor-grabbing"
     >
       <motion.span style={{ opacity: okOpacity }} className={`${stamp} left-5 -rotate-12 border-brand-400 text-brand-400`}>
         ĐÚNG
@@ -270,5 +271,44 @@ function SwipeCard(props: { children: React.ReactNode; onRight: () => Promise<bo
       </motion.span>
       {props.children}
     </motion.div>
+  )
+}
+
+/**
+ * Khung nền xanh chứa thẻ duyệt. Thẻ có thể cao hơn phần còn trống (chọn danh mục thì hiện thêm ô chi tiết,
+ * màn hình nhỏ, có banner thông báo…) → thu nhỏ cả cụm thẻ cho vừa khung, luôn nằm giữa, không tràn ra ngoài.
+ */
+function FitBox({ children }: { children: React.ReactNode }) {
+  const outer = useRef<HTMLDivElement>(null)
+  const inner = useRef<HTMLDivElement>(null)
+  const [scale, setScale] = useState(1)
+
+  useLayoutEffect(() => {
+    const o = outer.current
+    const i = inner.current
+    if (!o || !i) return
+    const fit = () => {
+      const pad = 24 // py-3 của khung
+      const avail = o.clientHeight - pad
+      const need = i.offsetHeight
+      setScale(need > 0 && avail > 0 ? Math.min(1, avail / need) : 1)
+    }
+    fit()
+    const ro = new ResizeObserver(fit)
+    ro.observe(o)
+    ro.observe(i)
+    return () => ro.disconnect()
+  }, [])
+
+  return (
+    <div ref={outer} className="relative flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden rounded-2xl bg-brand-50 px-3 py-3">
+      <div
+        ref={inner}
+        style={{ transform: `scale(${scale})`, transformOrigin: 'center' }}
+        className="flex w-full shrink-0 flex-col items-center"
+      >
+        {children}
+      </div>
+    </div>
   )
 }

@@ -31,50 +31,16 @@ supabase functions deploy gmail-connect gmail-poll ingest-sms
 ```
 Cron `titan-gmail` dùng chung 2 secret Vault với thông báo hẹn giờ (`titan_functions_url`, `titan_cron_secret`) nên không cần tạo thêm. Cron chỉ gọi function khi có người đã kết nối.
 
----
-
-## Cách thủ công (dự phòng): Google Apps Script + token
-
-```
-VCB → email biên lai → Gmail → Apps Script (mỗi phút) → Titan → 🔔 iPhone
-```
-
-## Bước 1 · Trong Titan
-
-1. Mở Titan → thẻ **📧 Tự ghi từ email VCB**.
-2. Nhập **4 số cuối tài khoản VCB chính** → **Lưu**.
-3. Bấm **Tạo token kết nối Gmail** → **Copy** token (chỉ hiện một lần).
-
-## Bước 2 · Tạo Apps Script
-
-> Đăng nhập **đúng tài khoản Google nhận email VCB**.
-
-1. Vào [script.google.com](https://script.google.com) → **New project**, đổi tên thành `Titan Gmail`.
-2. Xóa nội dung có sẵn, dán toàn bộ file [`integrations/gmail-apps-script/Code.gs`](../integrations/gmail-apps-script/Code.gs) → **Save** (⌘S).
-3. Bánh răng **Project Settings** → kéo xuống **Script properties** → **Add script property**:
-   - Property: `TITAN_TOKEN`
-   - Value: token vừa copy
-   - **Save script properties**
-
-## Bước 3 · Bật đồng bộ
-
-1. Quay lại **Editor** (biểu tượng `< >`), chọn hàm **`testLatest`** ở thanh trên → **Run**.
-2. Google hỏi quyền → **Review permissions** → chọn tài khoản → nếu thấy *"Google hasn't verified this app"* bấm **Advanced → Go to Titan Gmail (unsafe)** → **Allow**.
-   (Đây là script của chính bạn nên Google chưa "xác minh"; script chỉ đọc email VCB và gửi về Titan.)
-3. Xem **Execution log**: thấy `"ok":true` là kết nối thành công, iPhone sẽ nhận thông báo.
-4. Chọn hàm **`setup`** → **Run** → log báo `✅ Đã bật đồng bộ mỗi phút`.
-
-Xong! Từ giờ mỗi biên lai VCB mới sẽ tự vào Titan.
-
 ## Gỡ lỗi
 
 | Hiện tượng | Cách xử lý |
 |---|---|
-| Log báo `TITAN_TOKEN sai hoặc đã bị thu hồi` | Tạo token mới trong Titan, cập nhật Script property |
-| Thông báo *"Vào Cài đặt nhập 4 số cuối…"* | Nhập 4 số cuối tài khoản VCB trong Titan |
-| Không thấy gì sau vài phút | script.google.com → **Executions** để xem lần chạy gần nhất |
-| Tài khoản trường (UIT) chặn Apps Script | Tạo bộ lọc Gmail **chuyển tiếp** email từ `VCBDigibank@info.vietcombank.com.vn` sang Gmail cá nhân, rồi cài script trên Gmail cá nhân |
-| Muốn tắt | Chạy hàm **`teardown`** |
+| Tab Tôi báo "Mất kết nối Gmail" | Bấm **Kết nối lại Gmail** và cho phép lại quyền đọc Gmail |
+| Thông báo nhờ nhập đủ số tài khoản | Tab Tôi → nhập đủ số tài khoản VCB → **Lưu** |
+| Không thấy gì sau vài phút | Xem log `gmail-poll` trên Supabase, cột `last_checked_at` và `error` của `gmail_connections` |
+| Tài khoản trường chặn quyền đọc Gmail | Tạo bộ lọc Gmail **chuyển tiếp** email từ `VCBDigibank@info.vietcombank.com.vn` sang Gmail cá nhân, rồi kết nối Gmail cá nhân |
+
+> v1.4 bỏ cách thủ công bằng Google Apps Script + token. Ai từng cài thì vào [script.google.com](https://script.google.com), mở project `Titan Gmail`, chạy hàm `teardown` (hoặc xóa luôn project).
 
 ## Lưu ý về tài khoản email
 

@@ -14,16 +14,16 @@
 - 🔁 Nhận diện **chuyển tiền giữa các tài khoản của chính mình** — không tính vào thu chi
 - 🔔 Thông báo đẩy trên iPhone · 🗑️ Thùng rác 30 ngày · 💸 Chi phí vận hành **0đ**
 
-> **v1.3 – Giao diện mới, tự đọc Gmail** ([ghi chú phát hành](docs/releases/v1.3.0.md), [1.3.1](docs/releases/v1.3.1.md), [1.3.2](docs/releases/v1.3.2.md), [1.3.3](docs/releases/v1.3.3.md)). Thiết kế ở [docs/07](docs/07-v1.1-ke-hoach-chi-tieu.md), [docs/08](docs/08-v1.2-tong-ket-doi-soat.md), [docs/09](docs/09-v1.3-giao-dien-moi.md) và [BRD mục 11](docs/01-dac-ta-nghiep-vu.md#11-danh-sách-tính-năng-và-lộ-trình).
+> **v1.3 – Giao diện mới, tự đọc Gmail** ([ghi chú phát hành](docs/releases/v1.3.0.md), [1.3.1](docs/releases/v1.3.1.md), [1.3.2](docs/releases/v1.3.2.md), [1.3.3](docs/releases/v1.3.3.md), [1.3.4](docs/releases/v1.3.4.md)). Thiết kế ở [docs/07](docs/07-v1.1-ke-hoach-chi-tieu.md), [docs/08](docs/08-v1.2-tong-ket-doi-soat.md), [docs/09](docs/09-v1.3-giao-dien-moi.md) và [BRD mục 11](docs/01-dac-ta-nghiep-vu.md#11-danh-sách-tính-năng-và-lộ-trình).
 
 ## Kiến trúc
 
 ```mermaid
 flowchart LR
     VCB[VCB Digibank] -- email biên lai --> GM[Gmail]
-    GM --> GAS[Google Apps Script<br/>mỗi phút]
-    GAS -- "POST + token" --> ING[Edge Function<br/>ingest-sms]
+    POLL[Edge Function<br/>gmail-poll mỗi phút] -- Gmail API --> GM
     subgraph Supabase
+      POLL --> ING[_lib/ingest<br/>đọc biên lai]
       ING --> DB[(PostgreSQL + RLS)]
       SUG[Edge Function<br/>suggest-category] --> DB
       AUTH[Auth · Google]
@@ -40,7 +40,7 @@ flowchart LR
 |---|---|
 | Frontend | React 19 · Vite · TypeScript · Tailwind CSS · TanStack Query · vite-plugin-pwa (Workbox) |
 | Backend | Supabase: PostgreSQL (RLS, RPC, view) · Auth Google · Edge Functions (Deno) · pg_cron |
-| Tích hợp | Google Apps Script (Gmail) · Web Push (VAPID) · Claude API (tùy chọn) |
+| Tích hợp | Gmail API (gmail.readonly) · Web Push (VAPID) · Claude API (tùy chọn) |
 | Hạ tầng | Vercel · Supabase Cloud · GitHub Actions |
 
 **Nguyên tắc thiết kế**
@@ -111,7 +111,6 @@ apps/web/                   React PWA (features/: home, review, quick-entry, onb
 supabase/migrations/        schema, RLS, RPC, cron
 supabase/functions/         Edge Functions · _shared (hàm thuần + test) · _lib (Deno: push, AI, crypto)
 supabase/tests/             test SQL
-integrations/gmail-apps-script/  script đọc Gmail
 scripts/                    test-db, test-ingest, make-icons
 docs/                       tài liệu
 ```

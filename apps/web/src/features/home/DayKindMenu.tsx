@@ -78,7 +78,7 @@ export function DayKindMenu(props: { today: string; month: string; current: DayK
         </motion.ul>
       )}
 
-      <Sheet open={editing} onClose={() => setEditing(false)} title="Kiểu ngày tháng này">
+      <Sheet open={editing} onClose={() => setEditing(false)} title="Kiểu ngày tháng này" autoFocus={false}>
         {editing && <KindsEditor month={props.month} kinds={props.kinds} onDone={() => setEditing(false)} />}
       </Sheet>
     </div>

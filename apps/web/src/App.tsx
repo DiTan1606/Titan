@@ -106,7 +106,7 @@ function SignedIn() {
 
       <TabBar tab={tab} onTab={setTab} homeBadge={pending.data} />
 
-      <Sheet open={digest} onClose={() => setDigest(false)} title="Tổng kết hôm nay">
+      <Sheet open={digest} onClose={() => setDigest(false)} title="Tổng kết hôm nay" autoFocus={false}>
         <DigestScreen
           onOpenReview={() => {
             setDigest(false)

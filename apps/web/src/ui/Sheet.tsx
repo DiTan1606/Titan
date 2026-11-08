@@ -1,6 +1,6 @@
 import { X } from 'lucide-react'
 import { motion } from 'motion/react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 const PAGE = '#f7f6f2' // ink-50, nền trang
@@ -9,9 +9,22 @@ const SHEET = '#ffffff' // nền bảng
 // Số bảng đang mở (bảng có thể chồng lên nhau, ví dụ Sửa giao dịch → Đổi loại)
 let openSheets = 0
 
+/**
+ * Màu thanh trạng thái (giờ, pin). Ghi cả theme-color lẫn nền html/body vì Safari iOS 26 và app ở màn hình chính
+ * lấy màu vùng này từ nền trang chứ không chỉ từ theme-color.
+ */
 function setThemeColor(color: string) {
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', color)
+  document.documentElement.style.backgroundColor = color
+  document.body.style.backgroundColor = color
 }
+
+// Ô nhập được tự focus khi mở bảng: ưu tiên ô có data-autofocus, không thì ô gõ chữ / số đầu tiên
+// (bỏ qua ô ngày / giờ / màu… vì trên iPhone chúng mở bảng chọn chứ không phải bàn phím)
+const TEXT_INPUT = ['text', 'search', 'tel', 'number', 'email', 'url', 'password']
+  .map((t) => `input[type=${t}]:not([disabled]):not([readonly])`)
+  .join(', ')
+const FOCUSABLE = `[data-autofocus], ${TEXT_INPUT}, input:not([type]):not([disabled]):not([readonly]), textarea:not([disabled]):not([readonly])`
 
 /**
  * V13-19 · Bảng nhập liệu toàn màn hình, trượt từ dưới lên (giống màn thiết lập ban đầu):
@@ -19,8 +32,15 @@ function setThemeColor(color: string) {
  * Bàn phím trượt đè lên phần dưới, không đẩy gì cả. Đang gõ thì có thêm khoảng trống đáy để cuộn ô nhập lên trên bàn phím.
  * Không dùng hiệu ứng thoát: nếu bị khựng, một bảng toàn màn hình kẹt lại sẽ che hết app (bài học v1.1).
  */
-export function Sheet(props: { open: boolean; onClose: () => void; title?: string; children: React.ReactNode }) {
-  const { open, onClose } = props
+export function Sheet(props: {
+  open: boolean
+  onClose: () => void
+  title?: string
+  /** V14: mặc định tự focus ô nhập đầu tiên để bàn phím hiện ngay; tắt cho bảng chủ yếu để xem / chọn */
+  autoFocus?: boolean
+  children: React.ReactNode
+}) {
+  const { open, onClose, autoFocus = true } = props
   const body = useRef<HTMLDivElement>(null)
   const [typing, setTyping] = useState(false)
 
@@ -36,6 +56,14 @@ export function Sheet(props: { open: boolean; onClose: () => void; title?: strin
       if (openSheets === 0) setThemeColor(PAGE)
     }
   }, [open, onClose])
+
+  // Focus ngay trong lúc commit (vẫn nằm trong cú chạm mở bảng) thì iOS mới chịu bật bàn phím
+  useLayoutEffect(() => {
+    if (!open || !autoFocus) return
+    const root = body.current
+    const el = root?.querySelector<HTMLElement>('[data-autofocus]') ?? root?.querySelector<HTMLElement>(FOCUSABLE)
+    el?.focus({ preventScroll: true })
+  }, [open, autoFocus])
 
   if (!open) return null
 

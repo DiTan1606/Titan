@@ -1,27 +1,23 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
-import { ChevronDown, Copy, KeyRound, Mail, RefreshCw, Unplug } from 'lucide-react'
+import { Mail, RefreshCw, Unplug } from 'lucide-react'
 import { AccountNumberInput } from '../../components/AccountNumberInput'
 import { isAccountNumber } from '../../lib/account'
-import { useApiTokenStatus } from '../../lib/data'
 import { disconnectGmail, signInWithGoogle, useGmailConnection } from '../../lib/gmail'
 import { Button } from '../../ui/Button'
 import { supabase } from '../../lib/supabase'
 
 // Cài đặt kết nối Gmail → Titan (docs/04-ket-noi-gmail.md)
-// V13-12: cách chính là đăng nhập Google có quyền đọc Gmail; Apps Script + token là cách thủ công dự phòng.
+// V13-12: đăng nhập Google có quyền đọc Gmail. v1.4 bỏ hẳn cách Apps Script + token.
 export function AutoSyncCard() {
   const gmail = useGmailConnection()
   const qc = useQueryClient()
-  const [manual, setManual] = useState(false)
   const [walletId, setWalletId] = useState<string | null>(null)
   const [account, setAccount] = useState('')
   const [savedSuffix, setSavedSuffix] = useState<string | null>(null)
   const [hasFull, setHasFull] = useState(false)
-  const [token, setToken] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const tokenStatus = useApiTokenStatus()
 
   useEffect(() => {
     supabase
@@ -50,17 +46,6 @@ export function AutoSyncCard() {
     setMessage('Đã lưu số tài khoản VCB')
   }
 
-  async function createToken() {
-    if (!confirm('Tạo token mới sẽ vô hiệu hóa token cũ (nếu có). Tiếp tục?')) return
-    setBusy(true)
-    const { data, error } = await supabase.rpc('rotate_api_token')
-    setBusy(false)
-    if (error) return setMessage(error.message)
-    setToken(data as string)
-    setMessage(null)
-    tokenStatus.refetch()
-  }
-
   return (
     <section className="card p-4">
       <div className="flex items-center gap-3">
@@ -74,13 +59,11 @@ export function AutoSyncCard() {
               ? `${gmail.data.email} · kiểm tra ${gmail.data.last_checked_at ? timeAgo(gmail.data.last_checked_at) : 'sắp tới'}`
               : gmail.data
                 ? 'Mất kết nối Gmail, bấm Kết nối lại'
-                : tokenStatus.data?.last_used_at
-                  ? `Apps Script gửi dữ liệu ${timeAgo(tokenStatus.data.last_used_at)}`
-                  : 'Chưa kết nối'}
+                : 'Chưa kết nối'}
           </p>
         </div>
         <span
-          className={`size-3 rounded-full ${gmail.data?.status === 'active' || tokenStatus.data?.last_used_at ? 'bg-brand-400' : gmail.data ? 'bg-red-500' : 'bg-ink-300'}`}
+          className={`size-3 rounded-full ${gmail.data?.status === 'active' ? 'bg-brand-400' : gmail.data ? 'bg-red-500' : 'bg-ink-300'}`}
         />
       </div>
 
@@ -121,31 +104,6 @@ export function AutoSyncCard() {
         </Button>
       </div>
 
-      <button type="button" onClick={() => setManual(!manual)} className="mt-4 flex w-full items-center justify-between text-sm font-bold text-ink-500">
-        Cách thủ công: Apps Script + token
-        <ChevronDown size={18} className={`transition-transform ${manual ? 'rotate-180' : ''}`} />
-      </button>
-      {manual && (
-        <Button variant="soft" full disabled={busy} onClick={createToken} icon={<KeyRound size={18} />} className="mt-2" caps={false}>
-          Tạo token kết nối Gmail
-        </Button>
-      )}
-
-      {token && (
-        <div className="mt-3 rounded-2xl border-2 border-attn-200 bg-attn-50 p-3 text-sm">
-          <p className="font-bold text-attn-800">Token chỉ hiện một lần, copy ngay:</p>
-          <code className="mt-2 block rounded-xl bg-white p-2 text-xs break-all">{token}</code>
-          <Button
-            size="sm"
-            variant="primary"
-            className="mt-2"
-            icon={<Copy size={16} />}
-            onClick={() => navigator.clipboard.writeText(token).then(() => setMessage('Đã copy token'))}
-          >
-            Copy
-          </Button>
-        </div>
-      )}
 
       {message && <p className="mt-3 text-sm font-semibold text-ink-600">{message}</p>}
     </section>

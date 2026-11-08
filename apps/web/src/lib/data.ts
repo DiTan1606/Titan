@@ -254,19 +254,6 @@ export function useTrash() {
   })
 }
 
-export function useApiTokenStatus() {
-  return useQuery({
-    queryKey: ['api-token'],
-    queryFn: async () =>
-      throwIf(
-        await supabase
-          .from('api_tokens')
-          .select('prefix, created_at, last_used_at')
-          .is('revoked_at', null)
-          .maybeSingle(),
-      ) as { prefix: string; created_at: string; last_used_at: string | null } | null,
-  })
-}
 
 /** Gọi RPC confirm_transaction (duyệt + sửa + học ghi nhớ quán) */
 export async function confirmTransaction(id: string, patch: Record<string, unknown> = {}) {

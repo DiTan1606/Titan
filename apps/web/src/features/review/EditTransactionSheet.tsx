@@ -30,7 +30,7 @@ const MOODS = [
 /** Sửa một giao dịch (cũng là duyệt nếu đang chờ) · đổi loại · xóa vào thùng rác. */
 export function EditTransactionSheet(props: { txn: Transaction | null; categories: Category[]; onClose: () => void }) {
   return (
-    <Sheet open={!!props.txn} onClose={props.onClose} title="Sửa giao dịch">
+    <Sheet open={!!props.txn} onClose={props.onClose} title="Sửa giao dịch" autoFocus={false}>
       {props.txn && <EditForm key={props.txn.id} {...props} txn={props.txn} />}
     </Sheet>
   )
