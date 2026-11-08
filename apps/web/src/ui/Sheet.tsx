@@ -105,11 +105,14 @@ export function Sheet(props: {
           const el = e.target as HTMLElement
           if (!el.matches('input, textarea')) return
           setTyping(true)
-          // đợi bàn phím trượt lên rồi đưa ô đang gõ vào giữa phần còn nhìn thấy
-          setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 350)
+          // đợi bàn phím trượt lên rồi đưa ô đang gõ lên gần đầu (cách 7rem), chắc chắn nằm trên bàn phím
+          setTimeout(() => el.scrollIntoView({ block: 'start', behavior: 'smooth' }), 350)
         }}
-        onBlur={() => setTyping(false)}
-        className={`mx-auto w-full max-w-md min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-2 ${
+        onBlur={(e) => {
+          // chuyển sang ô nhập khác thì bàn phím vẫn mở: giữ khoảng trống, khỏi giật màn hình
+          if (!(e.relatedTarget as HTMLElement | null)?.matches?.('input, textarea')) setTyping(false)
+        }}
+        className={`mx-auto w-full max-w-md min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-pt-28 px-5 pt-2 ${
           typing ? 'pb-[55vh]' : 'pb-[calc(2rem+env(safe-area-inset-bottom))]'
         }`}
       >

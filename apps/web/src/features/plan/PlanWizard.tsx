@@ -98,6 +98,7 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
 
   // Chưa sửa gì thì dùng giá trị điền sẵn từ dữ liệu (kế hoạch đang có / tiền vào tháng trước)
   const [sourcesDraft, setSources] = useState<Source[] | null>(null)
+  const [typing, setTyping] = useState(false)
   const [savingsDraft, setSavings] = useState<number | null | undefined>(undefined)
   const [capsDraft, setCaps] = useState<Map<string, number | null> | null>(null)
   const ready = plan.isSuccess && lastIncome.isSuccess && budgets.isSuccess
@@ -265,10 +266,18 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
       ) : (
         <>
           <div
-            className="mx-auto w-full max-w-md min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-4 pb-6"
+            // Bàn phím iPhone đè lên phần dưới chứ không thu nhỏ màn hình: đang gõ thì chừa thêm khoảng trống đáy
+            // để cuộn được ô cuối lên trên bàn phím (giống bảng Sheet)
+            className={`mx-auto w-full max-w-md min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-pt-28 px-5 pt-4 ${typing ? 'pb-[55vh]' : 'pb-6'}`}
             onFocus={(e) => {
               const el = e.target as HTMLElement
-              if (el.matches('input')) setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 350)
+              if (!el.matches('input, textarea')) return
+              setTyping(true)
+              setTimeout(() => el.scrollIntoView({ block: 'start', behavior: 'smooth' }), 350)
+            }}
+            onBlur={(e) => {
+              // chuyển sang ô nhập khác thì bàn phím vẫn mở: giữ khoảng trống, khỏi giật màn hình
+              if (!(e.relatedTarget as HTMLElement | null)?.matches?.('input, textarea')) setTyping(false)
             }}
           >
             {/* Linh vật + lời dẫn */}
