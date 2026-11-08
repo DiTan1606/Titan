@@ -77,7 +77,7 @@ const steps = (name: string): Step[] => [
     target: 'settings-spending',
     mood: 'shock',
     title: 'Cấu hình chi tiêu',
-    text: 'Danh mục và các loại ngày tui cài mặc định rồi, bạn sửa tùy ý. Nhưng sửa trước khi lập kế hoạch và trước khi có giao dịch nha, đừng để nước tới chân.',
+    text: 'Trong thẻ Chi tiêu có danh mục và các loại ngày tui cài mặc định rồi, bạn sửa tùy ý. Nhưng sửa trước khi lập kế hoạch và trước khi có giao dịch nha, đừng để nước tới chân.',
   },
   {
     tab: 'profile',

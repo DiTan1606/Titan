@@ -3,7 +3,7 @@ import { vnDate } from '@shared/quick-entry.ts'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo } from 'react'
 import { computePlan, type DayKind, dayKindsConfig, type DayKindsConfig, monthDays, monthStart, type Spend, weightsOf } from '@shared/budget.ts'
-import { bufferOf, FLOW_SELECT, type Flow, type IncomeSource, type MonthActual, monthPlan, openingBalance, toFlow, toSources } from '@shared/cashflow.ts'
+import { FLOW_SELECT, type Flow, type IncomeSource, type MonthActual, monthPlan, openingBalance, toFlow, toSources } from '@shared/cashflow.ts'
 import { buildRecap, type RecapTxn } from '@shared/recap.ts'
 import { type BillCounts, walletBills } from './bills'
 import { supabase } from './supabase'
@@ -408,7 +408,7 @@ export function useMonthPlan(month: string) {
       const row = throwIf(
         await supabase
           .from('month_plans')
-          .select('income, savings, created_at, day_kinds, income_sources, carry_over, closed_fixed, extra_to_flex, extra_kept')
+          .select('income, savings, created_at, day_kinds, income_sources, carry_over, closed_fixed, extra_to_flex, extra_kept, buffer')
           .eq('month', month)
           .maybeSingle(),
       ) as {
@@ -421,6 +421,7 @@ export function useMonthPlan(month: string) {
         closed_fixed: string[] | null
         extra_to_flex: number | null
         extra_kept: number | null
+        buffer: number | null
       } | null
       return row
         ? {
@@ -434,6 +435,7 @@ export function useMonthPlan(month: string) {
             closedFixed: row.closed_fixed ?? [],
             extraToFlex: Number(row.extra_to_flex ?? 0),
             extraKept: Number(row.extra_kept ?? 0),
+            buffer: Number(row.buffer ?? 0),
           }
         : null
     },
@@ -561,9 +563,8 @@ export function usePlan(today: string) {
   const flows = useMonthFlows(month)
   const limits = useDayLimits(month)
   const wallets = useWallets()
-  const profile = useProfile()
   const ready =
-    plan.isSuccess && recurring.isSuccess && days.isSuccess && flows.isSuccess && limits.isSuccess && wallets.isSuccess && profile.isSuccess
+    plan.isSuccess && recurring.isSuccess && days.isSuccess && flows.isSuccess && limits.isSuccess && wallets.isSuccess
   // V16: cùng monthPlan với cron-notify — dư tháng trước, nguồn thu tự tick, hạn mức theo dòng tiền
   const computed =
     ready && plan.data
@@ -585,7 +586,7 @@ export function usePlan(today: string) {
           dayKinds: days.data,
           flows: flows.data,
           balance: spendableBalance(wallets.data),
-          buffer: bufferOf(profile.data.settings),
+          buffer: plan.data.buffer,
           frozen: limits.data,
         })
       : null

@@ -278,9 +278,5 @@ export const toSources = (raw: unknown): IncomeSource[] =>
     done: x.done === true,
   }))
 
-/** Tiền đệm trong profiles.settings.cash_buffer; chưa đặt → 100.000đ */
+/** Tiền đệm mặc định của kế hoạch mới (V16: đặt theo từng tháng, month_plans.buffer) */
 export const DEFAULT_BUFFER = 100_000
-export const bufferOf = (settings: Record<string, unknown> | null | undefined) => {
-  const v = Number(settings?.cash_buffer)
-  return Number.isFinite(v) && v >= 0 ? v : DEFAULT_BUFFER
-}

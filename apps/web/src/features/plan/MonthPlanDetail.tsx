@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { Clapperboard, Lock } from 'lucide-react'
+import { Clapperboard, LifeBuoy, Lock } from 'lucide-react'
 import { motion } from 'motion/react'
 import { createElement, useState } from 'react'
 import { type DayKind, type DayKindsConfig, type DayPlan, kindDef, monthDays, spentByParent } from '@shared/budget.ts'
@@ -196,6 +196,26 @@ export function MonthPlanDetail() {
           ) : (
             <p className="mt-2 text-sm text-ink-500">Gắn tài khoản cho ví Tiết kiệm ở Trang chủ để theo dõi tiến độ tiết kiệm.</p>
           )}
+        </section>
+      )}
+
+      {/* V16 · Tiền đệm của tháng: chỉ xem, sửa ở thẻ tháng */}
+      {plan && (
+        <section className="card flex items-center gap-3 p-4">
+          <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-attn-50 text-attn-600">
+            <LifeBuoy size={22} strokeWidth={2.4} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline justify-between gap-2">
+              <h2 className="text-lg font-extrabold">Tiền đệm</h2>
+              <span className="num font-extrabold">{formatVnd(plan.buffer)}</span>
+            </div>
+            <p className="text-sm text-ink-500">
+              {plan.buffer > 0
+                ? 'Luôn chừa lại trong VCB + tiền mặt cho chuyện bất ngờ, không tính để tiêu. Sửa ở thẻ tháng.'
+                : 'Tháng này không chừa tiền đệm. Muốn chừa thì bấm Sửa ở thẻ tháng.'}
+            </p>
+          </div>
         </section>
       )}
 

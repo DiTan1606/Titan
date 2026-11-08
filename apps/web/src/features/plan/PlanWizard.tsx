@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { createElement, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { computePlan, type DayKind, type DayKindsConfig, dayKindsConfig, kindDef, monthDays, spentByParent, weightsOf } from '@shared/budget.ts'
-import { bufferOf, planStartDay } from '@shared/cashflow.ts'
+import { DEFAULT_BUFFER, planStartDay } from '@shared/cashflow.ts'
 import { MoneyInput } from '../../components/MoneyInput'
 import { type SafeMood, TitanSafe } from '../../components/TitanSafe'
 import {
@@ -132,7 +132,9 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
   // V16 · Dư tháng trước: số dư VCB + tiền mặt lúc bắt đầu kế hoạch (Titan tự tính), chừa tiền đệm
   const startDay = planStartDay(month, plan.data?.createdDay ?? today)
   const opening = useOpeningBalance(month, startDay)
-  const buffer = bufferOf(profile.data?.settings)
+  // V16 · Tiền đệm đặt theo tháng: khoản luôn chừa lại trong VCB + tiền mặt, không tính để tiêu
+  const [bufferDraft, setBuffer] = useState<number | null | undefined>(undefined)
+  const buffer = (bufferDraft === undefined ? (plan.data?.buffer ?? DEFAULT_BUFFER) : bufferDraft) ?? 0
   const [carryDraft, setCarry] = useState<boolean | null>(null)
   const carryOver = carryDraft ?? (plan.data ? plan.data.carryOver : true)
   const carried = carryOver && opening !== null ? opening - buffer : 0
@@ -140,11 +142,26 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
   const cats = categories.data ?? []
   const typedIncome = (sources ?? []).reduce((s, x) => s + (x.amount ?? 0), 0)
   const income = typedIncome + carried
-  const fixedTotal = (recurring.data ?? []).filter((r) => r.active).reduce((s, r) => s + r.amount, 0)
+  // V16 · Khoản cố định đã trả trong tháng (tick "Đã trả"). Lập kế hoạch giữa tháng: khoản tới hạn trước ngày bắt đầu
+  // coi như đã trả trước khi dùng Titan (bỏ tick được)
+  const [closedDraft, setClosed] = useState<Set<string> | null>(null)
+  const startDayNum = startDay > month ? Number(startDay.slice(8)) : 0
+  const closed =
+    closedDraft ??
+    new Set(
+      plan.data
+        ? plan.data.closedFixed
+        : (recurring.data ?? []).filter((r) => r.active && r.dueDay !== null && r.dueDay < startDayNum).map((r) => r.id),
+    )
+  const toggleClosed = (id: string) => {
+    const next = new Set(closed)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setClosed(next)
+  }
   // V14: để dành chỉ tính khi đã có ví tiết kiệm (tài khoản thật); chưa có thì bỏ qua, coi như 0
   const piggyReady = !!piggy?.accountSuffix
   const savingsUsed = piggyReady ? (savings ?? 0) : 0
-  const flexible = income - fixedTotal - savingsUsed
   const kinds: DayKindsConfig = plan.data?.kinds ?? dayKindsConfig(profile.data?.settings?.day_kinds)
 
   // Ước tính tiền mỗi loại ngày: chạy đúng cách tính của kế hoạch (đã trừ tiền đã tiêu, khóa ngày đã qua)
@@ -161,7 +178,10 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
     weights: weightsOf(kinds),
     startDay,
     frozen: limits.data,
+    closedFixed: [...closed],
   })
+  const fixedTotal = preview.fixedTotal
+  const flexible = preview.flexibleBudget
   const unit = preview.todayLimit / kindDef(kinds, kindOf(today)).weight
 
   const lastByParent = useMemo(() => spentByParent(lastSpends.data ?? []), [lastSpends.data])
@@ -218,6 +238,8 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
         savings: savingsUsed,
         income_sources: clean,
         carry_over: carryOver,
+        buffer,
+        closed_fixed: [...closed],
         ...(dayKinds ? { day_kinds: dayKinds } : {}),
       })
       if (up.error) throw new Error(up.error.message)
@@ -352,7 +374,7 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
                       />
                     </label>
                     {carryOver && buffer > 0 && (
-                      <p className="text-xs text-ink-400">Chừa {formatVnd(buffer)} tiền đệm, không tính để tiêu. Đổi ở Cấu hình.</p>
+                      <p className="text-xs text-ink-400">Chừa {formatVnd(buffer)} tiền đệm, không tính để tiêu. Đổi ở bước Tiết kiệm.</p>
                     )}
                   </div>
 
@@ -451,6 +473,18 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
                           </span>
                         </span>
                       </button>
+                      {r.active && (
+                        <button
+                          type="button"
+                          aria-pressed={closed.has(r.id)}
+                          onClick={() => toggleClosed(r.id)}
+                          className={`shrink-0 rounded-xl border-2 px-2 py-1 text-xs font-extrabold ${
+                            closed.has(r.id) ? 'border-brand-500 bg-brand-400 text-white' : 'border-ink-200 bg-white text-ink-500'
+                          }`}
+                        >
+                          {closed.has(r.id) ? 'Đã trả' : 'Chưa trả'}
+                        </button>
+                      )}
                       <Switch on={r.active} onChange={() => toggleItem(r)} label={`Tháng này trả ${r.name}`} />
                     </div>
                   ))}
@@ -461,10 +495,14 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
                   >
                     <Plus size={18} /> Thêm khoản cố định
                   </button>
-                  <Total label="Tổng khoản cố định" value={fixedTotal} />
+                  <p className="px-1 text-xs text-ink-500">
+                    "Đã trả": khoản đã trả xong tháng này (kể cả trước khi dùng Titan), không giữ tiền nữa. Công tắc tắt: tháng này và các tháng sau không trả.
+                  </p>
+                  <Total label="Khoản cố định còn giữ tiền" value={fixedTotal} />
                 </>
               ) : step === 'savings' ? (
-                piggyReady ? (
+                <>
+                {piggyReady ? (
                   <>
                     <MoneyInput value={savings} onChange={setSavings} />
                     <div className="flex flex-wrap gap-2">
@@ -509,7 +547,9 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
                     </Button>
                     <p className="text-xs text-ink-400">Chưa muốn tiết kiệm tháng này thì bấm Bỏ qua ở dưới.</p>
                   </div>
-                )
+                )}
+                <BufferPicker value={buffer} onChange={setBuffer} />
+                </>
               ) : step === 'days' ? (
                 <>
                   <MonthCalendar month={month} today={today} kindOf={kindOf} kinds={kinds} onTap={setPickDay} />
@@ -547,13 +587,13 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
                 </>
               ) : (
                 <div className="card p-4 text-sm">
-                  {carried !== 0 && <Line label="Dư tháng trước (đã chừa tiền đệm)" value={carried} />}
+                  {carried !== 0 && <Line label={`Dư tháng trước (đã chừa ${formatVnd(buffer)} tiền đệm)`} value={carried} />}
                   {(sources ?? [])
                     .filter((s) => (s.amount ?? 0) > 0)
                     .map((s) => (
                       <Line key={s.key} label={`${s.name.trim() || 'Thu nhập'}${s.day ? ` · ngày ${s.day}` : ''}`} value={s.amount ?? 0} />
                     ))}
-                  <Line label="Khoản cố định" value={-fixedTotal} />
+                  <Line label="Khoản cố định (chưa trả)" value={-fixedTotal} />
                   <Line label="Tiết kiệm (dự kiến)" value={-savingsUsed} />
                   <div className="mt-2 border-t-2 border-ink-100 pt-2">
                     <Line label="Tiền linh hoạt" value={flexible} strong />
@@ -701,5 +741,34 @@ function SavingsReminder(props: { amount: number; account: string }) {
     <p className="rounded-2xl border-2 border-dashed border-[#D4537E]/40 bg-[#FBEAF0] p-3 text-sm font-semibold text-[#993556]">
       Nhớ chuyển {formatVnd(props.amount)} từ VCB sang ví tiết kiệm {props.account} trong tháng. Két đọc biên lai và ghi vào tiến độ tiết kiệm.
     </p>
+  )
+}
+
+/** V16 · Tiền đệm của tháng: chọn nhanh hoặc tự nhập */
+function BufferPicker(props: { value: number; onChange: (v: number | null) => void }) {
+  return (
+    <div className="card mt-2 flex flex-col gap-2 p-3">
+      <div>
+        <p className="font-extrabold">Tiền đệm</p>
+        <p className="text-sm text-ink-500">
+          Luôn chừa lại trong VCB + tiền mặt cho chuyện bất ngờ (xe hư, ốm, lương về trễ). Titan không tính khoản này để tiêu.
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {[0, 100_000, 200_000, 500_000].map((v) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => props.onChange(v)}
+            className={`btn-3d rounded-xl border-2 px-3 py-1.5 text-sm font-bold ${
+              props.value === v ? 'border-brand-600 bg-brand-400 text-white' : 'border-ink-200 bg-white text-ink-600'
+            }`}
+          >
+            {v === 0 ? 'Không' : formatVnd(v)}
+          </button>
+        ))}
+      </div>
+      <MoneyInput value={props.value} onChange={props.onChange} />
+    </div>
   )
 }

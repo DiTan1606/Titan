@@ -87,7 +87,7 @@ export function MonthCard(props: {
       </dl>
       <p className="mt-1 text-xs font-semibold text-ink-500">
         {a.unallocated > 0 && `Trong đó ${formatVnd(a.unallocated)} tiền dư chưa phân bổ. `}
-        VCB {formatVnd(bank)} · tiền mặt {formatVnd(cash)}. Mở app VCB và đếm ví: lệch thì sửa số dư ở Cấu hình.
+        VCB {formatVnd(bank)} · tiền mặt {formatVnd(cash)}. Mở app VCB và đếm ví: lệch thì sửa số dư ở Cấu hình → Ngân hàng.
       </p>
 
       <div className={`mt-3 rounded-2xl p-3 ${a.canSpend < 0 ? 'bg-attn-50' : 'bg-brand-50'}`}>

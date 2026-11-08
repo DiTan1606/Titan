@@ -1,11 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { ChevronRight, LifeBuoy, Scale } from 'lucide-react'
+import { ChevronRight, Scale } from 'lucide-react'
 import { useState } from 'react'
-import { DEFAULT_BUFFER, bufferOf } from '@shared/cashflow.ts'
 import { BillCounter } from '../../components/BillCounter'
 import { MoneyInput } from '../../components/MoneyInput'
 import { type BillCounts, billsTotal } from '../../lib/bills'
-import { useCashBills, useProfile, useRefreshMoney, useSaveSettings, useWallets, type Wallet } from '../../lib/data'
+import { useCashBills, useRefreshMoney, useWallets, type Wallet } from '../../lib/data'
 import { formatVnd } from '../../lib/format'
 import { supabase } from '../../lib/supabase'
 import { Button } from '../../ui/Button'
@@ -126,63 +125,5 @@ function Diff({ value }: { value: number }) {
     <p className="px-1 text-xs font-semibold text-attn-600">
       {value < 0 ? `Ít hơn Titan tính ${formatVnd(-value)}. Có khoản chi quên ghi rồi đó.` : `Nhiều hơn Titan tính ${formatVnd(value)}.`}
     </p>
-  )
-}
-
-/** V16 · Cấu hình · Tiền đệm: khoản tối thiểu luôn để trong VCB + tiền mặt, không bao giờ tính để tiêu */
-export function BufferCard() {
-  const profile = useProfile()
-  const save = useSaveSettings()
-  const toast = useToast()
-  const qc = useQueryClient()
-  const current = bufferOf(profile.data?.settings)
-  const [draft, setDraft] = useState<number | null | undefined>(undefined)
-  const value = draft === undefined ? current : draft
-
-  async function apply(v: number) {
-    try {
-      await save({ cash_buffer: v })
-      setDraft(undefined)
-      await qc.invalidateQueries({ queryKey: ['plan'] })
-      toast(`Tiền đệm ${formatVnd(v)}`, { tone: 'success' })
-    } catch (e) {
-      toast((e as Error).message, { tone: 'error' })
-    }
-  }
-
-  return (
-    <section className="card flex flex-col gap-3 p-4">
-      <div className="flex items-center gap-3">
-        <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-attn-50 text-attn-600">
-          <LifeBuoy size={22} strokeWidth={2.4} />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block font-extrabold">Tiền đệm</span>
-          <span className="block text-sm text-ink-500">Luôn chừa lại cho chuyện bất ngờ (xe hư, ốm), không tính vào hạn mức.</span>
-        </span>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {[0, DEFAULT_BUFFER, 200_000, 500_000].map((v) => (
-          <button
-            key={v}
-            type="button"
-            onClick={() => apply(v)}
-            className={`btn-3d rounded-xl border-2 px-3 py-1.5 text-sm font-bold ${
-              current === v ? 'border-brand-600 bg-brand-400 text-white' : 'border-ink-200 bg-white text-ink-600'
-            }`}
-          >
-            {v === 0 ? 'Không' : formatVnd(v)}
-          </button>
-        ))}
-      </div>
-      <div className="flex items-center gap-2">
-        <div className="min-w-0 flex-1">
-          <MoneyInput value={value} onChange={setDraft} />
-        </div>
-        <Button size="sm" variant="soft" className="h-14" disabled={value === null || value === current} onClick={() => apply(value ?? 0)}>
-          Lưu
-        </Button>
-      </div>
-    </section>
   )
 }

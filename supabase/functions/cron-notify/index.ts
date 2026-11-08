@@ -3,7 +3,7 @@
 // Body tùy chọn {"at": "<ISO>"} để giả lập thời điểm khi test; {"user_id": "..."} để chỉ chạy cho một người.
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { type DayKind, dayKindsConfig, monthStart, spentByParent, weightsOf } from '../_shared/budget.ts'
-import { bufferOf, FLOW_SELECT, monthPlan, toFlow, toSources } from '../_shared/cashflow.ts'
+import { FLOW_SELECT, monthPlan, toFlow, toSources } from '../_shared/cashflow.ts'
 import { dueReminder, MORNING_HOUR, monthStartMessage, notifySettings, type PushText, vnClock } from '../_shared/notify.ts'
 import { vnDate } from '../_shared/quick-entry.ts'
 import { timingSafeEqual } from '../_lib/crypto.ts'
@@ -91,10 +91,10 @@ async function loadPlanContext(db: SupabaseClient, userId: string, today: string
   const end = new Date(start)
   end.setMonth(end.getMonth() + 1)
 
-  const [plan, recurring, days, flowRows, pending, budgets, limits, balances, profile] = await Promise.all([
+  const [plan, recurring, days, flowRows, pending, budgets, limits, balances] = await Promise.all([
     db
       .from('month_plans')
-      .select('income, savings, created_at, day_kinds, income_sources, carry_over, closed_fixed, extra_to_flex, extra_kept')
+      .select('income, savings, created_at, day_kinds, income_sources, carry_over, closed_fixed, extra_to_flex, extra_kept, buffer')
       .eq('user_id', userId)
       .eq('month', month)
       .maybeSingle(),
@@ -116,7 +116,6 @@ async function loadPlanContext(db: SupabaseClient, userId: string, today: string
     db.from('category_budgets').select('amount, category:categories(id, name)').eq('user_id', userId),
     db.from('day_limits').select('day, planned').eq('user_id', userId).gte('day', month).lt('day', vnDate(end)),
     db.from('wallet_balances').select('kind, balance').eq('user_id', userId).in('kind', ['bank', 'cash']),
-    db.from('profiles').select('settings').eq('id', userId).single(),
   ])
 
   // V16: cùng monthPlan với app (dư tháng trước, nguồn thu, hạn mức theo dòng tiền)
@@ -146,7 +145,7 @@ async function loadPlanContext(db: SupabaseClient, userId: string, today: string
         dayKinds: Object.fromEntries((days.data ?? []).map((d) => [d.day, d.kind as DayKind])),
         flows,
         balance: (balances.data ?? []).reduce((s, b) => s + Number(b.balance), 0),
-        buffer: bufferOf(profile.data?.settings as Record<string, unknown> | null),
+        buffer: Number(plan.data.buffer ?? 0),
         frozen: Object.fromEntries((limits.data ?? []).map((l) => [l.day as string, Number(l.planned)])),
       }).result
     : null
