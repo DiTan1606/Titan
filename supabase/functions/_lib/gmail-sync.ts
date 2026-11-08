@@ -62,8 +62,8 @@ export async function syncGmail(db: SupabaseClient, c: Connection): Promise<{ cr
       await sendPushToUser(db, c.user_id, {
         title: 'Titan mất kết nối Gmail',
         body: 'Vào tab Cấu hình bấm "Kết nối lại Gmail" để Titan tiếp tục tự ghi giao dịch VCB.',
-        url: '/?tab=me',
-      }).catch(() => {})
+        url: '/?tab=settings',
+      }, 'system').catch(() => {})
     }
     throw err
   }

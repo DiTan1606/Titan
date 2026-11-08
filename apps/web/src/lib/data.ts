@@ -523,42 +523,6 @@ export async function ensureSubcategory(parent: Category, name: string, existing
   return data.id
 }
 
-// ─────────────────────────────────────────────────────────────
-// v1.2 · Tổng kết cuối ngày, đối soát
-// ─────────────────────────────────────────────────────────────
-
-/** Ví đã đối soát hôm nay (để hiện ✓ trên màn Tổng kết) */
-export function useReconciledToday() {
-  return useQuery({
-    queryKey: ['transactions', 'reconciled-today'],
-    queryFn: async () => {
-      const { start } = todayRange()
-      const rows = throwIf(await supabase.from('reconciliations').select('wallet_id').gte('created_at', start)) ?? []
-      return new Set(rows.map((r) => r.wallet_id as string))
-    },
-  })
-}
-
-/** Hôm nay có giao dịch nào dùng tiền mặt không (BRD P8: chỉ hỏi đối soát khi có dùng) */
-export function useCashUsedToday(cashWalletId: string | undefined) {
-  return useQuery({
-    queryKey: ['transactions', 'cash-today', cashWalletId],
-    enabled: !!cashWalletId,
-    queryFn: async () => {
-      const { start, end } = todayRange()
-      const { count, error } = await supabase
-        .from('transactions')
-        .select('id', { count: 'exact', head: true })
-        .is('deleted_at', null)
-        .or(`wallet_id.eq.${cashWalletId},to_wallet_id.eq.${cashWalletId}`)
-        .gte('occurred_at', start)
-        .lt('occurred_at', end)
-      if (error) throw new Error(error.message)
-      return (count ?? 0) > 0
-    },
-  })
-}
-
 /** Tháng liền trước của "YYYY-MM-01" */
 export function prevMonth(month: string): string {
   const [y, m] = month.split('-').map(Number)
@@ -805,4 +769,107 @@ export function useSavingsProgress(month: string) {
     enabled: !!piggy,
     queryFn: () => savingsFlow(piggy!.id, month),
   })
+}
+
+/** V14-14 · Một dòng trong tổng kết ngày */
+export type DayItem = {
+  id: string
+  type: TxnType
+  amount: number
+  status: 'pending' | 'confirmed'
+  label: string
+  category: string | null
+  wallet: Wallet['kind'] | null
+  toWallet: Wallet['kind'] | null
+  time: string
+}
+
+/** V14-14 · Mọi giao dịch của một ngày (giờ Việt Nam) cho màn tổng kết ngày */
+export function useDayItems(day: string | null) {
+  return useQuery({
+    queryKey: ['transactions', 'day', day],
+    enabled: !!day,
+    queryFn: async (): Promise<DayItem[]> => {
+      const start = new Date(`${day}T00:00:00+07:00`)
+      const end = new Date(start.getTime() + 86_400_000)
+      const rows =
+        throwIf(
+          await supabase
+            .from('transactions')
+            .select(
+              'id, type, amount, status, description, merchant, counterparty, occurred_at, category:categories(name), wallet:wallets!transactions_wallet_id_user_id_fkey(kind), to_wallet:wallets!transactions_to_wallet_id_user_id_fkey(kind)',
+            )
+            .is('deleted_at', null)
+            .gte('occurred_at', start.toISOString())
+            .lt('occurred_at', end.toISOString())
+            .order('occurred_at'),
+        ) ?? []
+      return (rows as unknown as {
+        id: string
+        type: TxnType
+        amount: number
+        status: 'pending' | 'confirmed'
+        description: string | null
+        merchant: string | null
+        counterparty: string | null
+        occurred_at: string
+        category: { name: string } | null
+        wallet: { kind: Wallet['kind'] } | null
+        to_wallet: { kind: Wallet['kind'] } | null
+      }[]).map((r) => ({
+        id: r.id,
+        type: r.type,
+        amount: Number(r.amount),
+        status: r.status,
+        label: r.description || r.counterparty || r.merchant || r.category?.name || 'Không có nội dung',
+        category: r.category?.name ?? null,
+        wallet: r.wallet?.kind ?? null,
+        toWallet: r.to_wallet?.kind ?? null,
+        time: new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' }).format(new Date(r.occurred_at)),
+      }))
+    },
+  })
+}
+
+/** V14-17 · Một thông báo đã gửi (giao dịch mới, quỹ, nhắc nhở, lỗi đọc biên lai) */
+export type AppNotification = {
+  id: string
+  kind: 'transaction' | 'fund' | 'reminder' | 'system'
+  title: string
+  body: string
+  url: string | null
+  createdAt: string
+  readAt: string | null
+}
+
+export function useNotifications() {
+  return useQuery({
+    queryKey: ['notifications'],
+    queryFn: async (): Promise<AppNotification[]> =>
+      (
+        throwIf(
+          await supabase.from('notifications').select('id, kind, title, body, url, created_at, read_at').order('created_at', { ascending: false }).limit(100),
+        ) ?? []
+      ).map((n) => ({
+        id: n.id,
+        kind: n.kind,
+        title: n.title,
+        body: n.body,
+        url: n.url,
+        createdAt: n.created_at,
+        readAt: n.read_at,
+      })),
+    refetchInterval: 60_000,
+  })
+}
+
+export async function markNotificationsRead() {
+  const { error } = await supabase.from('notifications').update({ read_at: new Date().toISOString() }).is('read_at', null)
+  if (error) throw new Error(error.message)
+}
+
+/** Số thông báo chưa đọc (chấm trên chuông) */
+export function useUnreadCount() {
+  const n = useNotifications()
+  return (n.data ?? []).filter((x) => !x.readAt).length
 }

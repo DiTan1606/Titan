@@ -1,8 +1,9 @@
 import { vnDate } from '@shared/quick-entry.ts'
-import { ChevronLeft, ChevronRight, Landmark, Wallet } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Landmark, PiggyBank, Target, Wallet } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { EmptyState } from '../../components/EmptyState'
 import { TransactionRow } from '../../components/TransactionRow'
-import { type Transaction, useCategories, useWalletTransactions, useWallets } from '../../lib/data'
+import { fundsOf, type Transaction, useCategories, useWalletTransactions, useWallets } from '../../lib/data'
 import { directionFor, type Mode, periodOf, shiftAnchor } from '../../lib/period'
 import { formatDay, formatVnd } from '../../lib/format'
 import { useVnDays } from '../../lib/useVnDays'
@@ -14,18 +15,20 @@ const MODES: { id: Mode; label: string }[] = [
   { id: 'year', label: 'Năm' },
 ]
 
-/** V13-6 · Giao dịch: 2 tab VCB / Tiền mặt, lọc theo ngày / tháng / năm, nhóm theo ngày, mới nhất trước. */
+/** V13-6 · Giao dịch: tab VCB / Tiền mặt (V14: + Tiết kiệm và các quỹ, trượt ngang), lọc theo ngày / tháng / năm, nhóm theo ngày, mới nhất trước. */
 export function TransactionsScreen() {
   const wallets = useWallets()
   const categories = useCategories()
   const { today, yesterday } = useVnDays()
-  const [kind, setKind] = useState<'bank' | 'cash'>('bank')
+  // 'bank' | 'cash' | id của một quỹ
+  const [sel, setSel] = useState<string>('bank')
   const [mode, setMode] = useState<Mode>('month')
   const [anchor, setAnchor] = useState(today)
   const [editing, setEditing] = useState<Transaction | null>(null)
   const cats = useMemo(() => categories.data ?? [], [categories.data])
 
-  const wallet = wallets.data?.find((w) => w.kind === kind)
+  const wallet = wallets.data?.find((w) => (sel === 'bank' || sel === 'cash' ? w.kind === sel : w.id === sel))
+  const funds = fundsOf(wallets.data).filter((f) => f.accountSuffix || f.balance !== 0)
   const { from, to } = periodOf(mode, anchor)
   const txns = useWalletTransactions({ walletId: wallet?.id, from, to })
   const canNext = to <= today
@@ -58,17 +61,25 @@ export function TransactionsScreen() {
       <div className="flex shrink-0 flex-col gap-3">
       <h1 className="text-3xl font-extrabold tracking-tight">Giao dịch</h1>
 
-      <div className="grid grid-cols-2 gap-1 rounded-2xl bg-ink-100 p-1">
-        {(['bank', 'cash'] as const).map((k) => (
+      <div className="flex snap-x snap-mandatory scroll-px-1 gap-1 overflow-x-auto rounded-2xl bg-ink-100 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {[
+          { id: 'bank', label: 'VCB', icon: <Landmark size={18} strokeWidth={2.4} /> },
+          { id: 'cash', label: 'Tiền mặt', icon: <Wallet size={18} strokeWidth={2.4} /> },
+          ...funds.map((f) => ({
+            id: f.id,
+            label: f.name,
+            icon: f.isSavings ? <PiggyBank size={18} strokeWidth={2.4} /> : <Target size={18} strokeWidth={2.4} />,
+          })),
+        ].map((t) => (
           <button
-            key={k}
+            key={t.id}
             type="button"
-            aria-pressed={kind === k}
-            onClick={() => setKind(k)}
-            className={`flex items-center justify-center gap-2 rounded-xl py-2 font-bold ${kind === k ? 'bg-white text-brand-600 shadow-sm' : 'text-ink-500'}`}
+            aria-pressed={sel === t.id}
+            onClick={() => setSel(t.id)}
+            className={`flex w-[calc(50%-0.125rem)] shrink-0 snap-start items-center justify-center gap-2 rounded-xl py-2 font-bold ${sel === t.id ? 'bg-white text-brand-600 shadow-sm' : 'text-ink-500'}`}
           >
-            {k === 'bank' ? <Landmark size={18} strokeWidth={2.4} /> : <Wallet size={18} strokeWidth={2.4} />}
-            {k === 'bank' ? 'VCB' : 'Tiền mặt'}
+            {t.icon}
+            <span className="truncate">{t.label}</span>
           </button>
         ))}
       </div>
@@ -128,7 +139,14 @@ export function TransactionsScreen() {
 
       <div className="-mx-4 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-4 pb-4">
       {txns.isPending && <p className="py-6 text-center text-ink-400">Đang tải…</p>}
-      {txns.isSuccess && groups.length === 0 && <p className="py-10 text-center text-ink-500">Không có giao dịch nào trong {periodLabel.toLowerCase()}.</p>}
+      {txns.isSuccess && groups.length === 0 && (
+        <EmptyState
+          mood="judge"
+          title={`Trống trơn trong ${periodLabel.toLowerCase()}`}
+          text={mode === 'day' ? 'Hôm đó không tiêu đồng nào, hay là quên ghi? Tui nghi lắm.' : 'Không có giao dịch nào. Ví được nghỉ phép, hiếm lắm đó.'}
+        />
+      )}
+      {txns.isError && <EmptyState mood="shock" title="Ủa, tải không được" text="Mạng chập chờn rồi. Kéo lại hoặc mở lại app thử xem." />}
 
       {groups.map((g) => (
         <section key={g.label} className="card p-3">

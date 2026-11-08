@@ -1,6 +1,6 @@
 import { CalendarCheck, CalendarPlus, ChevronRight, Clapperboard } from 'lucide-react'
 import { motion } from 'motion/react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { monthDays } from '@shared/budget.ts'
 import { prevMonth, usePastMonths, usePlan } from '../../lib/data'
 import { formatVnd } from '../../lib/format'
@@ -18,11 +18,15 @@ import { PlanWizard } from './PlanWizard'
  * - Đã lập: "Xem kế hoạch tháng này" → chi tiết kế hoạch. Ngày cuối tháng có thêm nút Tổng kết.
  * - Qua tháng mới: tháng vừa rồi tự thành thẻ tháng trước, bấm vào xem lại tổng kết (recap) của tháng đó.
  */
-export function PlanScreen(props: { openRecap?: 'prev' }) {
+export function PlanScreen(props: { openRecap?: 'prev'; openWizard?: boolean; onWizardOpened?: () => void }) {
   const { today } = useVnDays()
   const { month, ready, plan, result } = usePlan(today)
   const past = usePastMonths(month)
-  const [setting, setSetting] = useState(false)
+  const [setting, setSetting] = useState(!!props.openWizard)
+  const { onWizardOpened, openWizard } = props
+  useEffect(() => {
+    if (openWizard) onWizardOpened?.()
+  }, [openWizard, onWizardOpened])
   const [viewing, setViewing] = useState(false)
   const [recapMonth, setRecapMonth] = useState<string | null>(props.openRecap === 'prev' ? prevMonth(month) : null)
 

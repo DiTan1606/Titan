@@ -6,7 +6,7 @@ import { parseIncoming } from '../_shared/incoming.ts'
 import { formatVnd } from '../_shared/money.ts'
 import { maskAccountNumbers } from '../_shared/sms/vcb.ts'
 import { sha256Hex } from './crypto.ts'
-import { sendPushToUser } from './push.ts'
+import { type NotificationKind, sendPushToUser } from './push.ts'
 import { suggestCategories } from './suggest.ts'
 import { serviceClient } from './supabase.ts'
 
@@ -73,7 +73,7 @@ export async function ingestText(db: SupabaseClient, userId: string, text: strin
 
   if (result.status === 'ignored') return { status: 'ignored', reason: result.reason }
   if (result.status === 'failed') {
-    await notify(userId, 'Titan chưa đọc được một giao dịch', FAIL_HINTS[result.reason] ?? 'Mở Titan để ghi tay khoản này.')
+    await notify(userId, 'Titan chưa đọc được một giao dịch', FAIL_HINTS[result.reason] ?? 'Mở Titan để ghi tay khoản này.', 'system')
     return { status: 'failed', reason: result.reason }
   }
   const msg = result.message!
@@ -160,7 +160,7 @@ export async function ingestText(db: SupabaseClient, userId: string, text: strin
   // 9. Thông báo: "-35.000đ · Ăn chính? · QUAN COM TAM"
   if (fund) {
     const summary = msg.sign === '-' ? `Đã bỏ ${formatVnd(amount)} vào ${fund.name}` : `Đã rút ${formatVnd(amount)} từ ${fund.name} về VCB`
-    await notify(userId, 'Titan · quỹ', summary)
+    await notify(userId, 'Titan · quỹ', summary, 'fund')
     return { status: 'created', transaction_id: txn.id, type, summary, balance_warning: balanceWarning }
   }
   let label = isAtm ? 'Rút tiền mặt' : isSelf ? 'Chuyển giữa tài khoản của bạn' : type === 'income' ? 'Tiền vào' : 'Chi tiêu'
@@ -170,7 +170,7 @@ export async function ingestText(db: SupabaseClient, userId: string, text: strin
   }
   const who = msg.counterparty ?? msg.merchant
   const summary = `${msg.sign}${formatVnd(msg.amount)} · ${label}${who ? ` · ${who}` : ''}`
-  await notify(userId, 'Titan · giao dịch mới', balanceWarning ? `${summary}\n${balanceWarning}` : summary)
+  await notify(userId, 'Titan · giao dịch mới', balanceWarning ? `${summary}\n${balanceWarning}` : summary, 'transaction')
 
   return { status: 'created', transaction_id: txn.id, type, summary, balance_warning: balanceWarning }
 }
@@ -188,9 +188,9 @@ async function matchFund(
   return f ? { id: f.id, name: f.name } : null
 }
 
-async function notify(userId: string, title: string, body: string) {
+async function notify(userId: string, title: string, body: string, kind: NotificationKind) {
   try {
-    await sendPushToUser(serviceClient(), userId, { title, body, url: '/' })
+    await sendPushToUser(serviceClient(), userId, { title, body, url: '/' }, kind)
   } catch (err) {
     console.error('push', err) // lỗi thông báo không được làm hỏng việc ghi giao dịch
   }

@@ -214,7 +214,7 @@ function buildPages(r: Recap): Page[] {
       bg: sv.status === 'under' ? '#854F0B' : '#993556',
       render: () => (
         <>
-          <Kicker>Để dành {r.partial ? 'tới giờ' : 'cả tháng'}</Kicker>
+          <Kicker>Tiết kiệm {r.partial ? 'tới giờ' : 'cả tháng'}</Kicker>
           <Big>{formatVnd(Math.max(0, sv.actual))}</Big>
           <Note>
             Dự kiến {formatVnd(sv.planned)} · {SAVINGS_LABEL[sv.status]}
@@ -230,7 +230,7 @@ function buildPages(r: Recap): Page[] {
       bg: '#185FA5',
       render: () => (
         <>
-          <Kicker>Tiền để dành trong các quỹ</Kicker>
+          <Kicker>Tiền trong ví tiết kiệm và các quỹ</Kicker>
           <Big>{formatVnd(r.fundsTotal)}</Big>
           {r.topFund!.target ? (
             <Note>

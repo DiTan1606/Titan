@@ -1,9 +1,10 @@
-import { CalendarRange, Landmark, MoonStar, PiggyBank, Plus, Target, Wallet } from 'lucide-react'
+import { CalendarRange, Landmark, PiggyBank, Plus, Target, Wallet } from 'lucide-react'
 import { motion } from 'motion/react'
 import { useState } from 'react'
 import type { DayKind } from '@shared/budget.ts'
 import { fundsOf, nicknameOf, usePendingCount, usePlan, useProfile, useSpendingStats, useWallets } from '../../lib/data'
 import { NewFundSheet } from '../funds/FundSheets'
+import { BellButton } from '../notifications/NotificationsSheet'
 import { FundTab } from './FundTab'
 import { homeMessage } from '../../lib/homeMessage'
 import { useVnDays } from '../../lib/useVnDays'
@@ -32,7 +33,7 @@ type HomeTab = WalletTab | string
  * Trang chủ v1.3 (V13-1): cố định một màn, không cuộn.
  * Xin chào + câu cà khịa → "Hôm nay còn được tiêu" (nút kiểu ngày cùng hàng) → thẻ lớn 2 tab VCB / Tiền mặt.
  */
-export function HomeScreen(props: { onOpenPlan: () => void; onOpenDigest: () => void; onAdd: (wallet: WalletTab, type: EntryType) => void }) {
+export function HomeScreen(props: { onOpenPlan: () => void; onOpenNotifications: () => void; onAdd: (wallet: WalletTab, type: EntryType) => void }) {
   const profile = useProfile()
   const wallets = useWallets()
   const stats = useSpendingStats()
@@ -57,15 +58,7 @@ export function HomeScreen(props: { onOpenPlan: () => void; onOpenDigest: () => 
       <motion.header {...rise(0)} className="shrink-0">
         <div className="flex items-center justify-between gap-2">
           <p className="text-lg font-extrabold text-brand-500">Xin chào, {nickname ?? 'bạn'}</p>
-          {hour >= 18 && (
-            <button
-              type="button"
-              onClick={props.onOpenDigest}
-              className="flex items-center gap-1.5 rounded-full bg-[#EEEDFE] px-3 py-1 text-xs font-extrabold text-[#534AB7]"
-            >
-              <MoonStar size={14} strokeWidth={2.6} /> Tổng kết
-            </button>
-          )}
+          <BellButton onClick={props.onOpenNotifications} />
         </div>
         {/* Câu cà khịa luôn một dòng (câu đã viết ngắn, quá dài thì cắt "…") */}
         <h1 className="mt-0.5 truncate text-[15px] font-bold text-ink-700">{message}</h1>

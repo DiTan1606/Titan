@@ -39,7 +39,7 @@ describe('digestMessage', () => {
     expect(m.body).toContain('85.000đ / 125.000đ')
     expect(m.body).toContain('dư 40.000đ')
     expect(m.body).toContain('2 giao dịch chờ duyệt')
-    expect(m.url).toBe('/?screen=digest')
+    expect(m.url).toBe('/?tab=plan')
   })
   it('lố hạn mức + vượt ngân sách danh mục', () => {
     const m = digestMessage({ todaySpent: 200_000, plan: { ...plan, todaySpent: 200_000 }, pending: 0, overBudget: ['Ăn uống'] })

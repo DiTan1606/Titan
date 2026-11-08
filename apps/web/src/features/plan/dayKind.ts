@@ -23,7 +23,7 @@ import {
   UtensilsCrossed,
 } from 'lucide-react'
 import type { CSSProperties } from 'react'
-import { type DayKind, type DayKindDef, type DayKindsConfig, kindDef } from '@shared/budget.ts'
+import type { DayKind, DayKindDef } from '@shared/budget.ts'
 import { supabase } from '../../lib/supabase'
 
 /** Tên icon (lưu trong cấu hình, xem DAY_ICONS) → hình */
@@ -59,11 +59,6 @@ export const kindStyle = (def: Pick<DayKindDef, 'color'>): CSSProperties => ({
   color: `color-mix(in srgb, ${def.color} 85%, black)`,
 })
 
-/** Loại tiếp theo khi chạm vào ô ngày trên lịch: đi lần lượt theo danh sách, bắt đầu từ Bình thường */
-export function nextKind(current: DayKind, kinds: DayKindsConfig): DayKind {
-  const i = kinds.findIndex((k) => k.key === kindDef(kinds, current).key)
-  return kinds[(i + 1) % kinds.length].key
-}
 
 export const WEEKDAY = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
 

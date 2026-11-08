@@ -291,7 +291,7 @@ function FundAccountForm(props: { fund: Fund; onClose: () => void }) {
   return (
     <div className="flex flex-col gap-4">
       <p className="-mt-2 text-sm text-ink-500">
-        Tiền để dành nằm ở một tài khoản ngân hàng thật, khác VCB (của bạn hoặc người thân). Chuyển từ VCB tới tài khoản này là Titan tự ghi vào {props.fund.name}, nên số
+        Tiền tiết kiệm nằm ở một tài khoản ngân hàng thật, khác VCB (của bạn hoặc người thân). Chuyển từ VCB tới tài khoản này là Titan tự ghi vào {props.fund.name}, nên số
         trong Titan luôn khớp với ngân hàng.
       </p>
       <AccountFields bank={bank} onBank={setBank} number={number} onNumber={setNumber} />
@@ -307,7 +307,7 @@ function AccountFields(props: { bank: string; onBank: (v: string) => void; numbe
     <div className="flex flex-col gap-2">
       <span className="text-sm font-bold text-ink-600">Tài khoản ngân hàng giữ tiền</span>
       <input value={props.bank} maxLength={40} onChange={(e) => props.onBank(e.target.value)} placeholder="Tên ngân hàng: Techcombank, MB, MoMo…" className={input} />
-      <AccountNumberInput value={props.number} onChange={props.onNumber} />
+      <AccountNumberInput value={props.number} onChange={props.onNumber} label="Số tài khoản giữ tiền" />
       <span className="text-xs text-ink-400">Titan chỉ lưu 4 số cuối và một mã băm, không lưu số tài khoản thật.</span>
     </div>
   )

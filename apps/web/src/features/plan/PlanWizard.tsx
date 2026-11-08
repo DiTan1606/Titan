@@ -3,7 +3,7 @@ import { ChevronLeft, Landmark, Plus, Trash2, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { createElement, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { type DayKind, type DayKindsConfig, dayKindsConfig, kindDef, monthDays, spentByParent } from '@shared/budget.ts'
+import { computePlan, type DayKind, type DayKindsConfig, dayKindsConfig, kindDef, monthDays, spentByParent, weightsOf } from '@shared/budget.ts'
 import { MoneyInput } from '../../components/MoneyInput'
 import { type SafeMood, TitanSafe } from '../../components/TitanSafe'
 import {
@@ -16,6 +16,7 @@ import {
   useMonthIncome,
   useMonthPlan,
   useMonthSpends,
+  useDayLimits,
   useProfile,
   useRecurringItems,
   useRefreshMoney,
@@ -28,7 +29,8 @@ import { supabase } from '../../lib/supabase'
 import { Button } from '../../ui/Button'
 import { CategoryIcon } from '../../ui/CategoryIcon'
 import { useToast } from '../../ui/toast-context'
-import { iconOf, kindStyle, nextKind, setDayKind } from './dayKind'
+import { iconOf, kindStyle, setDayKind } from './dayKind'
+import { KindPicker } from './KindPicker'
 import { FundAccountSheet } from '../funds/FundSheets'
 import { RecurringSheet } from './PlanSheets'
 
@@ -37,18 +39,18 @@ type Step = (typeof STEPS)[number]
 
 /** Lời linh vật két Titan ở từng bước */
 const SAY: Record<Step, { text: string; mood: SafeMood }> = {
-  income: { text: 'Tháng này tiền về từ đâu? Gia đình gửi, lương, học bổng… điền từng nguồn nha.', mood: 'idle' },
-  fixed: { text: 'Mấy khoản tháng nào cũng trả như tiền trọ, 4G, gói AI thì để đây. Titan giữ riêng tiền cho chúng.', mood: 'idle' },
-  savings: { text: 'Tháng này dự kiến để dành bao nhiêu? Chuyển thật vào ví tiết kiệm tới đâu, Titan ghi tiến độ tới đó.', mood: 'happy' },
-  days: { text: 'Ngày nào đi chơi, ngày nào ở nhà? Chạm vào ngày để đổi, Titan chia tiền theo đó.', mood: 'idle' },
-  budgets: { text: 'Danh mục nào hay lố thì đặt mức trần. Không cần đặt hết đâu, bỏ trống cũng được.', mood: 'idle' },
-  review: { text: 'Xong rồi nè! Xem lại lần cuối rồi chốt thôi.', mood: 'wow' },
+  income: { text: 'Tiền về từ đâu khai hết ra đây. Gia đình gửi, lương, học bổng… giấu nguồn nào là tháng đó tự chịu nha.', mood: 'smirk' },
+  fixed: { text: 'Tiền trọ, 4G, gói AI… mấy khoản không né được. Tui xí phần trước, khỏi lỡ tay tiêu mất rồi khóc.', mood: 'judge' },
+  savings: { text: 'Tiết kiệm trước rồi mới tiêu, chứ tiêu xong mới tiết kiệm thì tui đếm được bằng không đó.', mood: 'smirk' },
+  days: { text: 'Ngày nào đi quẩy, ngày nào ở nhà ăn mì? Chạm vào ngày mà khai thật, tui chia tiền theo đó.', mood: 'judge' },
+  budgets: { text: 'Danh mục nào hay vung tay thì đặt trần. Trà sữa đó, tui biết hết.', mood: 'judge' },
+  review: { text: 'Xong rồi. Nhìn lại lần cuối, chốt xong là tui canh từng đồng đó nha.', mood: 'laugh' },
 }
 
 const TITLE: Record<Step, string> = {
   income: 'Nguồn tiền tháng này',
   fixed: 'Khoản cố định',
-  savings: 'Để dành trước',
+  savings: 'Tiết kiệm trước',
   days: 'Thiết lập chi tiêu từng ngày',
   budgets: 'Thiết lập ngân sách từng danh mục',
   review: 'Chốt kế hoạch',
@@ -76,6 +78,8 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
   const plan = useMonthPlan(month)
   const lastIncome = useMonthIncome(prevMonth(month))
   const lastSpends = useMonthSpends(prevMonth(month))
+  const monthSpends = useMonthSpends(month)
+  const limits = useDayLimits(month)
   const recurring = useRecurringItems()
   const categories = useCategories()
   const budgets = useCategoryBudgets()
@@ -117,14 +121,22 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
   const savingsUsed = piggyReady ? (savings ?? 0) : 0
   const flexible = income - fixedTotal - savingsUsed
   const kinds: DayKindsConfig = plan.data?.kinds ?? dayKindsConfig(profile.data?.settings?.day_kinds)
-  // Nút nhanh "Cuối tuần là …": loại có sẵn Đi ăn sang, không còn thì loại đầu tiên nặng hơn bình thường
-  const weekendKind = kinds.find((k) => k.key === 'fancy') ?? kinds.find((k) => k.weight > 1)
 
-  // Ước tính tiền mỗi loại ngày: chia tiền linh hoạt theo hệ số các ngày còn lại của tháng
-  const days = monthDays(month).filter((d) => d >= today)
+  // Ước tính tiền mỗi loại ngày: chạy đúng cách tính của kế hoạch (đã trừ tiền đã tiêu, khóa ngày đã qua)
+  // với số đang nhập, rồi quy hạn mức hôm nay về 1 phần hệ số
   const kindOf = (d: string): DayKind => (dayPlans.data?.[d] as DayKind | undefined) ?? 'normal'
-  const totalWeight = days.reduce((s, d) => s + kindDef(kinds, kindOf(d)).weight, 0)
-  const unit = totalWeight > 0 ? Math.max(0, flexible) / totalWeight : 0
+  const preview = computePlan({
+    today,
+    income,
+    savings: savingsUsed,
+    fixed: (recurring.data ?? []).filter((r) => r.active),
+    spends: monthSpends.data ?? [],
+    dayKinds: dayPlans.data ?? {},
+    weights: weightsOf(kinds),
+    startDay: plan.data?.createdDay ?? today,
+    frozen: limits.data,
+  })
+  const unit = preview.todayLimit / kindDef(kinds, kindOf(today)).weight
 
   const lastByParent = useMemo(() => spentByParent(lastSpends.data ?? []), [lastSpends.data])
   const budgetCats = cats.filter((c) => c.kind === 'expense' && !c.parentId && c.systemKey !== 'unknown')
@@ -144,21 +156,20 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
     await qc.invalidateQueries({ queryKey: ['plan'] })
   }
 
-  async function cycleDay(d: string) {
+  const [pickDay, setPickDay] = useState<string | null>(null)
+  async function pickKind(kind: DayKind) {
+    const d = pickDay
+    setPickDay(null)
+    if (!d) return
     try {
-      await setDayKind(d, nextKind(kindOf(d), kinds))
+      await setDayKind(d, kind)
       await qc.invalidateQueries({ queryKey: ['plan', 'days'] })
     } catch (e) {
       toast((e as Error).message, { tone: 'error' })
     }
   }
 
-  async function weekendsFancy() {
-    const rows = days.filter((d) => [0, 6].includes(new Date(`${d}T12:00:00+07:00`).getUTCDay())).map((day) => ({ day, kind: weekendKind!.key }))
-    const { error } = await supabase.from('day_plans').upsert(rows)
-    if (error) return toast(error.message, { tone: 'error' })
-    await qc.invalidateQueries({ queryKey: ['plan', 'days'] })
-  }
+
 
   async function finish() {
     setBusy(true)
@@ -242,10 +253,10 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
 
       {done ? (
         <div className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
-          <TitanSafe size={170} mood="happy" />
+          <TitanSafe size={170} mood="laugh" />
           <h2 className="text-2xl font-extrabold">{done === 'saved' ? 'Đã lưu kế hoạch' : 'Chốt kế hoạch xong rồi'}</h2>
           <p className="text-ink-600">
-            Mỗi ngày Titan sẽ báo bạn còn được tiêu bao nhiêu. Lố một hôm thì mấy hôm sau tự bớt lại, không sao đâu.
+            Từ giờ mỗi ngày tui báo bạn còn được tiêu bao nhiêu. Lố hôm nay thì mấy hôm sau ăn mì bù, tui không tha đâu.
           </p>
           <Button variant="primary" size="lg" full onClick={props.onClose}>
             Xem kế hoạch
@@ -365,11 +376,11 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
                       ))}
                     </div>
                     <p className="rounded-2xl bg-white p-3 text-sm text-ink-600">
-                      Đây là số <b>dự kiến</b>. Mỗi lần bạn chuyển từ VCB sang ví tiết kiệm {fundAccountLabel(piggy!)}, Titan ghi vào tiến độ. Cuối tháng
+                      Đây là số <b>dự kiến</b>. Mỗi lần bạn chuyển từ VCB sang ví tiết kiệm {fundAccountLabel(piggy!)}, Két ghi vào tiến độ. Cuối tháng
                       tổng kết là đạt, vượt hay chưa đạt.
                     </p>
                     <Total label="Còn lại để tiêu (linh hoạt)" value={flexible} warn={flexible < 0} />
-                    {flexible < 0 && <p className="text-sm font-semibold text-red-600">Thu nhập chưa đủ cho khoản cố định và để dành. Bớt để dành lại chút nha.</p>}
+                    {flexible < 0 && <p className="text-sm font-semibold text-red-600">Thu nhập chưa đủ cho khoản cố định và tiết kiệm. Bớt tiết kiệm lại chút nha.</p>}
                   </>
                 ) : (
                   <div className="card flex flex-col items-center gap-3 p-5 text-center">
@@ -378,17 +389,17 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
                     </span>
                     <p className="font-extrabold">Chưa có ví tiết kiệm</p>
                     <p className="text-sm text-ink-500">
-                      Để dành cần một tài khoản ngân hàng thật (khác VCB) làm ví tiết kiệm, để số trong Titan khớp với ngân hàng. Thiết lập xong là quay lại bước này ngay.
+                      Tiết kiệm cần một tài khoản ngân hàng thật (khác VCB) làm ví tiết kiệm, để số trong Titan khớp với ngân hàng. Thiết lập xong là quay lại bước này ngay.
                     </p>
                     <Button variant="primary" full caps={false} onClick={() => setSettingUpPiggy(true)}>
                       Thiết lập ví tiết kiệm
                     </Button>
-                    <p className="text-xs text-ink-400">Chưa muốn để dành tháng này thì bấm Bỏ qua ở dưới.</p>
+                    <p className="text-xs text-ink-400">Chưa muốn tiết kiệm tháng này thì bấm Bỏ qua ở dưới.</p>
                   </div>
                 )
               ) : step === 'days' ? (
                 <>
-                  <MonthCalendar month={month} today={today} kindOf={kindOf} kinds={kinds} onTap={cycleDay} />
+                  <MonthCalendar month={month} today={today} kindOf={kindOf} kinds={kinds} onTap={setPickDay} />
                   <div className="card flex flex-col gap-1.5 p-3">
                     {kinds.map((k) => (
                       <div key={k.key} className="flex items-center gap-2 text-sm">
@@ -402,11 +413,6 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
                       </div>
                     ))}
                   </div>
-                  {weekendKind && (
-                    <Button variant="soft" full caps={false} onClick={weekendsFancy}>
-                      Cuối tuần là {weekendKind.label.toLowerCase()}
-                    </Button>
-                  )}
                   <p className="text-xs text-ink-400">Đổi tên và hệ số các loại ngày ở tab Cấu hình.</p>
                 </>
               ) : step === 'budgets' ? (
@@ -434,7 +440,7 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
                       <Line key={s.key} label={s.name.trim() || 'Thu nhập'} value={s.amount ?? 0} />
                     ))}
                   <Line label="Khoản cố định" value={-fixedTotal} />
-                  <Line label="Để dành (dự kiến)" value={-savingsUsed} />
+                  <Line label="Tiết kiệm (dự kiến)" value={-savingsUsed} />
                   <div className="mt-2 border-t-2 border-ink-100 pt-2">
                     <Line label="Tiền linh hoạt" value={flexible} strong />
                   </div>
@@ -468,6 +474,7 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
         </>
       )}
 
+      <KindPicker day={pickDay} current={pickDay ? kindOf(pickDay) : 'normal'} kinds={kinds} onPick={pickKind} onClose={() => setPickDay(null)} />
       <FundAccountSheet fund={settingUpPiggy && piggy ? piggy : null} onClose={() => setSettingUpPiggy(false)} />
       <RecurringSheet item={editingItem} categories={cats} onClose={() => setEditingItem(null)} onCreatedCategory={refresh} />
     </motion.div>
@@ -578,7 +585,7 @@ function SavingsReminder(props: { amount: number; account: string }) {
   if (props.amount <= 0) return null
   return (
     <p className="rounded-2xl border-2 border-dashed border-[#D4537E]/40 bg-[#FBEAF0] p-3 text-sm font-semibold text-[#993556]">
-      Nhớ chuyển {formatVnd(props.amount)} từ VCB sang ví tiết kiệm {props.account} trong tháng. Titan đọc biên lai và ghi vào tiến độ để dành.
+      Nhớ chuyển {formatVnd(props.amount)} từ VCB sang ví tiết kiệm {props.account} trong tháng. Két đọc biên lai và ghi vào tiến độ tiết kiệm.
     </p>
   )
 }

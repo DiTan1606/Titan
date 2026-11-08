@@ -17,6 +17,7 @@ cleanup() {
   $DB -c "delete from public.transactions where user_id = '$uid';
           delete from public.sms_messages where user_id = '$uid';
           delete from public.merchant_memory where user_id = '$uid';
+          delete from public.notifications where user_id = '$uid';
           delete from public.api_tokens where user_id = '$uid';
           update public.profiles set onboarded_at = null where id = '$uid';
           delete from public.wallets where user_id = '$uid' and kind = 'fund' and name = 'Quỹ test';

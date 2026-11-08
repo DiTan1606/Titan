@@ -3,7 +3,7 @@
 // Body tùy chọn {"at": "<ISO>"} để giả lập thời điểm khi test; {"user_id": "..."} để chỉ chạy cho một người.
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { computePlan, type DayKind, dayKindsConfig, monthStart, spentByParent, type Spend, weightsOf } from '../_shared/budget.ts'
-import { digestMessage, dueReminder, MORNING_HOUR, monthStartMessage, notifySettings, type PushText, vnClock } from '../_shared/notify.ts'
+import { dueReminder, MORNING_HOUR, monthStartMessage, notifySettings, type PushText, vnClock } from '../_shared/notify.ts'
 import { vnDate } from '../_shared/quick-entry.ts'
 import { timingSafeEqual } from '../_lib/crypto.ts'
 import { json } from '../_lib/http.ts'
@@ -22,11 +22,12 @@ Deno.serve(async (req) => {
   const { date: today, hour } = vnClock(now)
 
   const db = serviceClient()
-  let q = db.from('push_subscriptions').select('user_id')
-  if (body.user_id) q = q.eq('user_id', body.user_id)
-  const { data: subs, error } = await q
+  // V14-17: nhắc nhở lưu vào trang Thông báo cho mọi người đã thiết lập, có bật thông báo đẩy hay không
+  let q = db.from('profiles').select('id').not('onboarded_at', 'is', null)
+  if (body.user_id) q = q.eq('id', body.user_id)
+  const { data: profiles, error } = await q
   if (error) return json({ error: error.message }, 500)
-  const users = [...new Set((subs ?? []).map((s) => s.user_id as string))]
+  const users = (profiles ?? []).map((p) => p.id as string)
 
   // V14-12: chốt hạn mức hôm nay cho mọi người có kế hoạch tháng này (kể cả không bật thông báo).
   // Chạy mỗi giờ nên lần cuối trong ngày giữ đúng hạn mức của ngày; qua ngày mới số đó thành số chốt.
@@ -63,23 +64,20 @@ Deno.serve(async (req) => {
 async function notifyUser(db: SupabaseClient, userId: string, today: string, hour: number): Promise<string[]> {
   const { data: profile } = await db.from('profiles').select('settings').eq('id', userId).maybeSingle()
   const settings = notifySettings(profile?.settings as Record<string, unknown> | null)
-  const wantDigest = settings.digestHour === hour
+  // V14-14: bỏ thông báo tổng kết buổi tối; tổng kết từng ngày xem trong lịch hạn mức
   const wantMorning = hour === MORNING_HOUR
-  if (!wantDigest && !wantMorning) return []
+  if (!wantMorning) return []
 
   const ctx = await loadPlanContext(db, userId, today)
   const messages: [string, PushText | null][] = []
-  if (wantDigest) {
-    messages.push(['digest', digestMessage({ todaySpent: ctx.todaySpent, plan: ctx.result, pending: ctx.pending, overBudget: ctx.overBudget })])
-  }
-  if (wantMorning) {
+  {
     messages.push(['month', monthStartMessage(today)])
     if (ctx.result) messages.push(['due', dueReminder({ today, items: ctx.result.fixedItems, remindDays: settings.remindDays })])
   }
   const sent: string[] = []
   for (const [kind, m] of messages) {
     if (!m) continue
-    await sendPushToUser(db, userId, m)
+    await sendPushToUser(db, userId, m, 'reminder')
     sent.push(kind)
   }
   return sent

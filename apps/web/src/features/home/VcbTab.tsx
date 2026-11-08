@@ -14,7 +14,7 @@ export function VcbTab(props: { wallet: Wallet | undefined; onAdd: (type: EntryT
             <div className="min-h-0 flex-1">
               <FloatingBankCard balance={props.wallet?.balance ?? 0} suffix={props.wallet?.accountSuffix ?? null} holder={nicknameOf(profile.data)} />
             </div>
-            <p className="pb-3 text-center text-sm font-bold text-brand-600">Đã duyệt hết, chưa có khoản nào chờ</p>
+            <p className="pb-3 text-center text-sm font-bold text-brand-600">Duyệt sạch bách. Siêng bất ngờ ha</p>
           </div>
         }
       />

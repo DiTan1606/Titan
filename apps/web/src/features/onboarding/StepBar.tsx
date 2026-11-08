@@ -1,8 +1,8 @@
 import { ChevronLeft } from 'lucide-react'
 import { motion } from 'motion/react'
 
-/** Số bước của cả hành trình thiết lập: đăng nhập → biệt danh → 4 số cuối → số dư VCB → tiền mặt → thông báo */
-const SETUP_STEPS = 6
+/** Số bước của cả hành trình thiết lập: đăng nhập → biệt danh → số tài khoản → số dư VCB → tiền mặt → ví tiết kiệm → thông báo */
+const SETUP_STEPS = 7
 
 /** Thanh tiến độ thiết lập dùng chung cho màn đăng nhập và các bước sau */
 export function StepBar({ step, onBack }: { step: number; onBack?: () => void }) {

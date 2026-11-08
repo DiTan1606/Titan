@@ -44,13 +44,18 @@ export function Sheet(props: {
   const { open, onClose, autoFocus = true } = props
   const body = useRef<HTMLDivElement>(null)
   const [typing, setTyping] = useState(false)
+  // onClose thường là hàm tạo mới mỗi lần render: giữ trong ref để thứ tự bảng chồng không bị xáo khi cha render lại
+  const closeRef = useRef(onClose)
+  useEffect(() => {
+    closeRef.current = onClose
+  }, [onClose])
 
   useEffect(() => {
     if (!open) return
     const token = {}
     escStack.push(token)
     // Esc chỉ đóng bảng trên cùng (bảng chồng bảng)
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && escStack.at(-1) === token && onClose()
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && escStack.at(-1) === token && closeRef.current()
     document.addEventListener('keydown', onKey)
     openSheets++
     setThemeColor(SHEET) // thanh trạng thái (giờ, pin) cùng màu trắng với bảng
@@ -60,7 +65,7 @@ export function Sheet(props: {
       openSheets--
       if (openSheets === 0) setThemeColor(PAGE)
     }
-  }, [open, onClose])
+  }, [open])
 
   // Focus ngay trong lúc commit (vẫn nằm trong cú chạm mở bảng) thì iOS mới chịu bật bàn phím
   useLayoutEffect(() => {

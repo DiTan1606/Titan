@@ -16,7 +16,7 @@
 - 🔁 Nhận diện **chuyển tiền giữa các tài khoản của chính mình** — không tính vào thu chi
 - 🔔 Thông báo đẩy trên iPhone · 🗑️ Thùng rác 30 ngày · 💸 Chi phí vận hành **0đ**
 
-> **v1.4 – Kế hoạch tháng từng bước, quỹ là tài khoản thật** ([ghi chú phát hành](docs/releases/v1.4.0.md), thiết kế ở [docs/10](docs/10-v1.4-ke-hoach-quy.md)).
+> **v1.4 – Kế hoạch tháng từng bước, quỹ là tài khoản thật** ([ghi chú phát hành](docs/releases/v1.4.0.md), [1.4.1](docs/releases/v1.4.1.md), thiết kế ở [docs/10](docs/10-v1.4-ke-hoach-quy.md)).
 >
 > **v1.3 – Giao diện mới, tự đọc Gmail** ([ghi chú phát hành](docs/releases/v1.3.0.md), [1.3.1](docs/releases/v1.3.1.md), [1.3.2](docs/releases/v1.3.2.md), [1.3.3](docs/releases/v1.3.3.md), [1.3.4](docs/releases/v1.3.4.md)). Thiết kế ở [docs/07](docs/07-v1.1-ke-hoach-chi-tieu.md), [docs/08](docs/08-v1.2-tong-ket-doi-soat.md), [docs/09](docs/09-v1.3-giao-dien-moi.md) và [BRD mục 11](docs/01-dac-ta-nghiep-vu.md#11-danh-sách-tính-năng-và-lộ-trình).
 

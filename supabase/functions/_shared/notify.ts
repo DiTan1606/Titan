@@ -51,7 +51,8 @@ export function digestMessage(input: { todaySpent: number; plan: PlanResult | nu
   }
   if (input.pending > 0) parts.push(`${input.pending} giao dịch chờ duyệt`)
   if (input.overBudget.length > 0) parts.push(`vượt ngân sách ${input.overBudget.join(', ')}`)
-  return { title: 'Tổng kết hôm nay', body: `${parts.join(' · ')}. Chạm để đối soát ví.`, url: '/?screen=digest' }
+  // V14-14: không đối soát trong app nữa; chạm mở tab Kế hoạch, tổng kết từng ngày nằm trong lịch hạn mức
+  return { title: 'Tổng kết hôm nay', body: `${parts.join(' · ')}.`, url: '/?tab=plan' }
 }
 
 /** Nhắc khoản cố định: trước hạn N ngày, đúng ngày và 1 ngày sau hạn nếu chưa thấy giao dịch. */

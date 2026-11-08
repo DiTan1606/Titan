@@ -1,4 +1,4 @@
-import { Lock, Repeat, Trash2 } from 'lucide-react'
+import { ChevronRight, Lock, Repeat, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { CategoryPicker } from '../../components/CategoryPicker'
 import { MoneyInput } from '../../components/MoneyInput'
@@ -16,6 +16,7 @@ import {
 } from '../../lib/data'
 import { formatDay, formatTime, formatVnd } from '../../lib/format'
 import { Button } from '../../ui/Button'
+import { CategoryIcon } from '../../ui/CategoryIcon'
 import { Sheet } from '../../ui/Sheet'
 import { useToast } from '../../ui/toast-context'
 import { ChangeTypeSheet } from './ChangeTypeSheet'
@@ -104,73 +105,121 @@ function EditForm(props: { txn: Transaction; categories: Category[]; onClose: ()
       props.onClose()
     })
 
-  return (
-    <div className="flex flex-col gap-4">
-      <p className="-mt-2 text-sm font-semibold text-ink-500">
-        {formatDay(txn.occurredAt)} · {formatTime(txn.occurredAt)}
-        {txn.counterparty ? ` · ${isOutflow(txn.type) ? 'Tới' : 'Từ'} ${txn.counterparty}` : ''}
-      </p>
+  const cat = props.categories.find((c) => c.id === categoryId)
+  const wallet = wallets.data?.find((w) => w.id === txn.walletId)
+  const out = isOutflow(txn.type)
+  const typeLabel =
+    txn.type === 'transfer'
+      ? 'Chuyển nội bộ'
+      : txn.type === 'income'
+        ? 'Tiền vào'
+        : txn.type === 'borrow'
+          ? 'Được trả hộ'
+          : txn.type === 'lend'
+            ? 'Cho vay'
+            : txn.type === 'repay'
+              ? 'Trả nợ'
+              : txn.type === 'collect'
+                ? 'Thu nợ'
+                : 'Tiền ra'
+  const canChangeType = !!wallets.data && typeOptions(txn, wallets.data).length > 0
 
-      {locked ? (
-        <div className="flex items-center justify-between rounded-2xl bg-ink-50 px-4 py-3">
-          <span className="num text-2xl font-extrabold">{formatVnd(txn.amount)}</span>
-          <span className="flex items-center gap-1 text-xs font-bold text-ink-500">
-            <Lock size={13} /> Từ VCB, không sửa số tiền
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Thẻ đầu: loại, ví, thời gian, số tiền (VCB khóa số tiền) */}
+      <section className="card p-4">
+        <div className="flex items-center gap-2 text-xs font-bold">
+          <span className={`rounded-lg px-2 py-0.5 ${out ? 'bg-ink-100 text-ink-600' : 'bg-brand-50 text-brand-600'}`}>{typeLabel}</span>
+          {wallet && <span className="rounded-lg bg-ink-50 px-2 py-0.5 text-ink-500">{wallet.kind === 'bank' ? 'VCB' : wallet.name}</span>}
+          <span className="flex-1 text-right text-ink-400">
+            {formatDay(txn.occurredAt)} · {formatTime(txn.occurredAt)}
           </span>
         </div>
-      ) : (
-        <Field label="Số tiền">
-          <MoneyInput value={amount} onChange={setAmount} />
-        </Field>
+        <div className="mt-3 flex items-center gap-3">
+          <CategoryIcon category={cat} categories={props.categories} type={txn.type} size={44} />
+          <div className="min-w-0 flex-1">
+            {locked ? (
+              <>
+                <p className={`num text-3xl leading-tight font-extrabold ${out ? '' : 'text-brand-500'}`}>
+                  {out ? '−' : '+'}
+                  {formatVnd(txn.amount)}
+                </p>
+                <p className="flex items-center gap-1 text-xs font-bold text-ink-400">
+                  <Lock size={12} /> Từ VCB, không sửa số tiền
+                </p>
+              </>
+            ) : (
+              <MoneyInput value={amount} onChange={setAmount} />
+            )}
+          </div>
+        </div>
+        {txn.counterparty && (
+          <p className="mt-2 truncate text-sm font-semibold text-ink-500">
+            {out ? 'Tới' : 'Từ'} {txn.counterparty}
+          </p>
+        )}
+      </section>
+
+      {needsCategory(txn.type) && (
+        <section className="card p-4">
+          <h3 className="mb-2 text-sm font-extrabold text-ink-600">Danh mục</h3>
+          <CategoryPicker categories={props.categories} kind={kind} value={categoryId} onChange={setCategoryId} onCreated={refresh} />
+        </section>
       )}
 
-      <Field label="Mô tả">
+      <section className="card flex flex-col gap-2.5 p-4">
         <input
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          className="h-12 rounded-2xl border-2 border-ink-100 px-4 text-base font-medium outline-none focus:border-brand-300"
+          placeholder="Mô tả"
+          aria-label="Mô tả"
+          className="h-12 rounded-2xl border-2 border-ink-100 px-4 text-base font-semibold outline-none placeholder:font-normal placeholder:text-ink-400 focus:border-brand-300"
         />
-      </Field>
+        <input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Ghi chú"
+          aria-label="Ghi chú"
+          className="h-12 rounded-2xl border-2 border-ink-100 px-4 text-base outline-none placeholder:text-ink-400 focus:border-brand-300"
+        />
+        <div className="grid grid-cols-2 gap-2">
+          {MOODS.map((m) => (
+            <button
+              key={m.value}
+              type="button"
+              onClick={() => setMood(mood === m.value ? null : m.value)}
+              className={`btn-3d flex items-center justify-center gap-1.5 rounded-xl border-2 py-2 text-sm font-bold ${
+                mood === m.value
+                  ? m.value === 'worth'
+                    ? 'border-brand-600 bg-brand-400 text-white'
+                    : 'border-[#993C1D] bg-[#D85A30] text-white'
+                  : 'border-ink-200 bg-white text-ink-600'
+              }`}
+            >
+              {m.value === 'worth' ? <ThumbsUp size={16} /> : <ThumbsDown size={16} />} {m.label}
+            </button>
+          ))}
+        </div>
+      </section>
 
-      {needsCategory(txn.type) && (
-        <Field label="Danh mục">
-          <CategoryPicker categories={props.categories} kind={kind} value={categoryId} onChange={setCategoryId} onCreated={refresh} />
-        </Field>
-      )}
-
-      <div className="flex flex-wrap gap-2">
-        {MOODS.map((m) => (
-          <button
-            key={m.value}
-            type="button"
-            onClick={() => setMood(mood === m.value ? null : m.value)}
-            className={`btn-3d rounded-xl border-2 px-3 py-1.5 text-sm font-bold ${
-              mood === m.value ? 'border-brand-600 bg-brand-400 text-white' : 'border-ink-200 bg-white text-ink-600'
-            }`}
-          >
-            {m.label}
-          </button>
-        ))}
-      </div>
-
-      <input
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        placeholder="Ghi chú"
-        className="h-12 rounded-2xl border-2 border-ink-100 px-4 text-base outline-none placeholder:text-ink-400 focus:border-brand-300"
-      />
-
-      {wallets.data && typeOptions(txn, wallets.data).length > 0 && (
-        <Button variant="soft" icon={<Repeat size={18} />} onClick={() => setChangingType(true)} caps={false}>
-          Đổi loại · chuyển khoản, trả nợ, cho vay
-        </Button>
+      {canChangeType && (
+        <button type="button" onClick={() => setChangingType(true)} className="card flex items-center gap-3 p-4 text-left active:scale-[0.99]">
+          <span className="grid size-10 place-items-center rounded-2xl bg-[#EEEDFE] text-[#534AB7]">
+            <Repeat size={20} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-extrabold">Đổi loại giao dịch</span>
+            <span className="block text-sm text-ink-500">Chuyển khoản, bỏ vào quỹ, trả nợ, cho vay…</span>
+          </span>
+          <ChevronRight size={20} className="text-ink-300" />
+        </button>
       )}
 
       {error && <p className="text-sm font-semibold text-red-600">{error}</p>}
 
-      <div className="flex gap-2">
-        {!locked && <Button variant="danger" aria-label="Xóa" disabled={busy} onClick={remove} icon={<Trash2 size={20} />} />}
-        <Button variant="primary" full disabled={busy} onClick={save}>
+      <div className="flex gap-2 pt-1">
+        {!locked && <Button variant="danger" aria-label="Xóa vào thùng rác" disabled={busy} onClick={remove} icon={<Trash2 size={20} />} />}
+        <Button variant="primary" size="lg" full disabled={busy} onClick={save}>
           {busy ? 'Đang lưu…' : txn.status === 'pending' ? 'Lưu và duyệt' : 'Lưu'}
         </Button>
       </div>
@@ -183,14 +232,5 @@ function EditForm(props: { txn: Transaction; categories: Category[]; onClose: ()
         onPick={changeType}
       />
     </div>
-  )
-}
-
-function Field(props: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-sm font-bold text-ink-600">{props.label}</span>
-      {props.children}
-    </label>
   )
 }

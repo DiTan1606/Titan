@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { BellRing, Landmark, Mail, Share, Smile, Sparkles, SquarePlus, Wallet } from 'lucide-react'
+import { BellRing, Landmark, Mail, PiggyBank, Share, Smile, Sparkles, SquarePlus, Wallet } from 'lucide-react'
 import { motion } from 'motion/react'
 import { useState } from 'react'
 import { AccountNumberInput } from '../../components/AccountNumberInput'
@@ -17,10 +17,10 @@ import { StepBar } from './StepBar'
 
 /**
  * V13-10 · Thiết lập ban đầu: mỗi màn một câu hỏi. Bước 1 (đăng nhập Google) là màn SignIn.
- * Biệt danh → 4 số cuối VCB → số dư VCB → tiền mặt (đếm từng tờ, tổng tự cộng) → thông báo → hoàn tất.
+ * Biệt danh → số tài khoản VCB → số dư VCB → tiền mặt (đếm từng tờ, tổng tự cộng) → ví tiết kiệm (V14, bỏ qua được) → thông báo → hoàn tất.
  * Chỉ lưu khi bấm Hoàn tất (trừ quyền thông báo: bật ngay ở bước đó).
  */
-const STEPS = ['nickname', 'account', 'bank', 'cash', 'push', 'done'] as const
+const STEPS = ['nickname', 'account', 'bank', 'cash', 'savings', 'push', 'done'] as const
 type Step = (typeof STEPS)[number]
 
 export function Onboarding() {
@@ -32,6 +32,8 @@ export function Onboarding() {
   const [bank, setBank] = useState<number | null>(null)
   const [counts, setCounts] = useState<BillCounts>({})
   const [pushOn, setPushOn] = useState(false)
+  const [savingsBank, setSavingsBank] = useState('')
+  const [savingsNumber, setSavingsNumber] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -45,6 +47,7 @@ export function Onboarding() {
     account: isAccountNumber(account),
     bank: bank !== null,
     cash: true,
+    savings: savingsNumber === '' || isAccountNumber(savingsNumber),
     push: true,
     done: true,
   }
@@ -76,6 +79,14 @@ export function Onboarding() {
       // V13-13: lưu 4 số cuối + băm số tài khoản (không lưu số thật)
       const { error: e3 } = await supabase.rpc('set_bank_account', { p_number: account })
       if (e3) throw e3
+      // V14-10: ví tiết kiệm gắn tài khoản ngân hàng thật (nếu đã nhập)
+      if (savingsNumber) {
+        const { data: piggy } = await supabase.from('wallets').select('id').eq('is_savings', true).maybeSingle()
+        if (piggy) {
+          const { error: e4 } = await supabase.rpc('set_fund_account', { p_fund: piggy.id, p_number: savingsNumber, p_bank: savingsBank.trim() })
+          if (e4) throw new Error(e4.message.includes('account_in_use') ? 'Tài khoản tiết kiệm phải khác tài khoản VCB' : e4.message)
+        }
+      }
       // Lưu số tờ thành một lần đếm "khớp" → Trang chủ vẽ đúng các tờ trong ví
       if (counted > 0) {
         const { data: w } = await supabase.from('wallets').select('id').eq('kind', 'cash').single()
@@ -149,6 +160,35 @@ export function Onboarding() {
               <Next disabled={!valid.cash} label={cash === 0 ? 'Ví trống, tiếp tục' : 'Tiếp tục'} />
             </div>
           </div>
+        )}
+
+        {step === 'savings' && (
+          <Ask
+            icon={<PiggyBank size={30} />}
+            title="Có tài khoản tiết kiệm không?"
+            hint="Một tài khoản ngân hàng khác VCB (của bạn hay người thân) làm ví Tiết kiệm. Chuyển từ VCB sang đó là Titan tự ghi. Chưa có thì bỏ qua, gắn sau ở Trang chủ."
+          >
+            <input
+              value={savingsBank}
+              maxLength={40}
+              onChange={(e) => setSavingsBank(e.target.value)}
+              placeholder="Tên ngân hàng: Techcombank, MB, MoMo…"
+              className="h-14 rounded-2xl border-2 border-ink-100 bg-white px-4 text-base font-semibold outline-none placeholder:font-normal placeholder:text-ink-400 focus:border-brand-300"
+            />
+            <AccountNumberInput value={savingsNumber} onChange={setSavingsNumber} label="Số tài khoản tiết kiệm" />
+            <Next disabled={!valid.savings || !savingsNumber} />
+            <button
+              type="button"
+              onClick={() => {
+                setSavingsNumber('')
+                setSavingsBank('')
+                next()
+              }}
+              className="-mt-2 py-2 text-center text-sm font-bold text-ink-500"
+            >
+              Bỏ qua, để sau
+            </button>
+          </Ask>
         )}
 
         {step === 'push' && (

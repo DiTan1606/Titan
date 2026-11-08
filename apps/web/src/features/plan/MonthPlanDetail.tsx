@@ -1,20 +1,22 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { Check, ChevronRight, Clapperboard, Lock, Pencil, Plus } from 'lucide-react'
+import { Check, Clapperboard, Lock, Pencil } from 'lucide-react'
 import { motion } from 'motion/react'
 import { createElement, useState } from 'react'
 import { type DayKind, type DayKindsConfig, type DayPlan, kindDef, monthDays, spentByParent } from '@shared/budget.ts'
-import { type Category, type RecurringItem, useSavingsProgress, useCategories, useCategoryBudgets, usePlan, useRecurringItems, useRefreshMoney } from '../../lib/data'
+import { useSavingsProgress, useCategories, useCategoryBudgets, usePlan, useRecurringItems } from '../../lib/data'
 import { formatVnd } from '../../lib/format'
 import { useVnDays } from '../../lib/useVnDays'
 import { AnimatedVnd } from '../../ui/AnimatedNumber'
 import { Button } from '../../ui/Button'
 import { CategoryIcon } from '../../ui/CategoryIcon'
 import { useToast } from '../../ui/toast-context'
-import { iconOf, kindStyle, nextKind, setDayKind } from './dayKind'
+import { iconOf, kindStyle, setDayKind } from './dayKind'
+import { DaySummarySheet } from './DaySummary'
+import { KindPicker } from './KindPicker'
+import { useLongPress } from '../../lib/longPress'
 import { DailyBar } from '../home/DailyBar'
 import { DayKindMenu } from '../home/DayKindMenu'
 import { RecapStory } from '../recap/RecapStory'
-import { BudgetSheet, RecurringSheet } from './PlanSheets'
 import { PlanWizard } from './PlanWizard'
 
 /** V11 · Chi tiết kế hoạch tháng này (V14: mở từ thẻ "Xem kế hoạch tháng này" ở tab Kế hoạch) */
@@ -26,12 +28,9 @@ export function MonthPlanDetail() {
   const recurring = useRecurringItems()
   const categories = useCategories()
   const budgets = useCategoryBudgets()
-  const refresh = useRefreshMoney()
   const qc = useQueryClient()
   const toast = useToast()
   const [editingPlan, setEditingPlan] = useState(false)
-  const [editingItem, setEditingItem] = useState<RecurringItem | 'new' | null>(null)
-  const [budgetFor, setBudgetFor] = useState<Category | null>(null)
   const [recapMonth, setRecapMonth] = useState<string | null>(null)
 
   const cats = categories.data ?? []
@@ -39,9 +38,15 @@ export function MonthPlanDetail() {
   const fixedTotal = activeFixed.reduce((s, r) => s + r.amount, 0)
   const monthLabel = `Tháng ${Number(month.slice(5, 7))}`
 
-  async function cycleDay(day: string, current: DayKind) {
+  // V14-14/15: chạm ngày (đã qua / hôm nay) xem tổng kết ngày; nhấn giữ (hôm nay / ngày sau) chọn loại ngày
+  const [summaryDay, setSummaryDay] = useState<DayPlan | null>(null)
+  const [pickDay, setPickDay] = useState<DayPlan | null>(null)
+  async function pickKind(kind: DayKind) {
+    const d = pickDay
+    setPickDay(null)
+    if (!d) return
     try {
-      await setDayKind(day, nextKind(current, kinds))
+      await setDayKind(d.date, kind)
       await qc.invalidateQueries({ queryKey: ['plan', 'days'] })
     } catch (e) {
       toast((e as Error).message, { tone: 'error' })
@@ -54,9 +59,6 @@ export function MonthPlanDetail() {
     .map((c) => ({ category: c, spent: byParent.get(c.id) ?? 0, budget: budgets.data?.get(c.id) ?? null }))
     .filter((r) => r.spent > 0 || r.budget)
     .sort((a, b) => b.spent - a.spent)
-  const unbudgeted = cats.filter(
-    (c) => c.kind === 'expense' && !c.parentId && c.systemKey !== 'unknown' && !budgetRows.some((r) => r.category.id === c.id),
-  )
 
   return (
     <div className="flex flex-col gap-4 pb-4">
@@ -82,19 +84,32 @@ export function MonthPlanDetail() {
             )}
           </section>
 
-          <DailyLimits days={result.days} kinds={kinds} startDay={plan!.createdDay} onTap={(d) => cycleDay(d.date, d.kind)} />
+          <DailyLimits
+            days={result.days}
+            kinds={kinds}
+            startDay={plan!.createdDay}
+            onOpen={setSummaryDay}
+            onLong={setPickDay}
+            onHint={() => toast('Nhấn giữ một ngày để đổi loại ngày')}
+          />
+          <DaySummarySheet day={summaryDay} kinds={kinds} beforePlan={!!summaryDay && summaryDay.date < plan!.createdDay} onClose={() => setSummaryDay(null)} />
+          <KindPicker day={pickDay?.date ?? null} current={pickDay?.kind ?? 'normal'} kinds={kinds} onPick={pickKind} onClose={() => setPickDay(null)} />
 
           <section className="card p-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-extrabold">{monthLabel}</h2>
-              <button type="button" onClick={() => setEditingPlan(true)} className="inline-flex items-center gap-1 text-sm font-bold text-brand-500">
+              <button
+                type="button"
+                onClick={() => setEditingPlan(true)}
+                className="inline-flex items-center gap-1 rounded-xl bg-brand-50 px-3 py-1.5 text-sm font-bold text-brand-600 active:bg-brand-100"
+              >
                 <Pencil size={14} /> Sửa
               </button>
             </div>
             <dl className="mt-2 text-sm">
               <Line label="Thu nhập dự kiến" value={plan!.income} />
               <Line label="Khoản cố định" value={-result.fixedTotal} />
-              <Line label="Để dành (dự kiến)" value={-plan!.savings} />
+              <Line label="Tiết kiệm (dự kiến)" value={-plan!.savings} />
               <Line label="Tiền linh hoạt" value={result.flexibleBudget} strong />
             </dl>
             <Progress value={result.flexibleSpent} max={Math.max(result.flexibleBudget, 1)} />
@@ -111,12 +126,9 @@ export function MonthPlanDetail() {
             <h2 className="text-lg font-extrabold">Khoản cố định</h2>
             <p className="num text-sm text-ink-500">{formatVnd(fixedTotal)} / tháng</p>
           </div>
-          <Button size="sm" variant="soft" icon={<Plus size={16} />} onClick={() => setEditingItem('new')}>
-            Thêm
-          </Button>
         </div>
         {recurring.data?.length === 0 && (
-          <p className="mt-3 rounded-2xl bg-ink-50 p-3 text-sm text-ink-500">Tiền trọ, gói AI, 4G… thêm vào để Titan giữ riêng tiền cho chúng.</p>
+          <p className="mt-3 rounded-2xl bg-ink-50 p-3 text-sm text-ink-500">Chưa có khoản nào. Bấm Sửa ở thẻ tháng để thêm tiền trọ, 4G, gói AI…</p>
         )}
         <ul className="mt-2">
           {recurring.data?.map((r) => {
@@ -126,11 +138,7 @@ export function MonthPlanDetail() {
             const overdue = r.active && r.dueDay !== null && !status?.done && r.dueDay < day
             return (
               <li key={r.id}>
-                <button
-                  type="button"
-                  onClick={() => setEditingItem(r)}
-                  className={`flex w-full items-center gap-3 rounded-2xl px-2 py-2.5 text-left active:bg-ink-100 ${r.active ? '' : 'opacity-50'}`}
-                >
+                <div className={`flex w-full items-center gap-3 px-1 py-2.5 ${r.active ? '' : 'opacity-50'}`}>
                   <CategoryIcon category={cats.find((c) => c.id === r.categoryId)} categories={cats} size={40} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-bold">{r.name}</span>
@@ -151,14 +159,12 @@ export function MonthPlanDetail() {
                     </span>
                   </span>
                   <span className="num font-bold">{formatVnd(r.amount)}</span>
-                  {status?.done ? (
+                  {status?.done && (
                     <span className="grid size-6 place-items-center rounded-full bg-brand-400 text-white">
                       <Check size={14} strokeWidth={3} />
                     </span>
-                  ) : (
-                    <ChevronRight size={18} className="text-ink-300" />
                   )}
-                </button>
+                </div>
               </li>
             )
           })}
@@ -168,7 +174,7 @@ export function MonthPlanDetail() {
       {result && plan!.savings > 0 && (
         <section className="card p-4">
           <div className="flex items-baseline justify-between">
-            <h2 className="text-lg font-extrabold">Để dành</h2>
+            <h2 className="text-lg font-extrabold">Tiết kiệm</h2>
             <span className="text-xs font-bold text-ink-400">dự kiến {formatVnd(plan!.savings)}</span>
           </div>
           {saved.isSuccess ? (
@@ -180,22 +186,22 @@ export function MonthPlanDetail() {
                   ? saved.data > plan!.savings
                     ? `Vượt dự kiến ${formatVnd(saved.data - plan!.savings)}`
                     : 'Đạt dự kiến rồi'
-                  : `Còn ${formatVnd(plan!.savings - saved.data)} nữa. Chuyển từ VCB sang ví tiết kiệm là Titan tự ghi.`}
+                  : `Còn ${formatVnd(plan!.savings - saved.data)} nữa`}
               </p>
             </>
           ) : (
-            <p className="mt-2 text-sm text-ink-500">Gắn tài khoản cho ví Tiết kiệm ở Trang chủ để theo dõi tiến độ để dành.</p>
+            <p className="mt-2 text-sm text-ink-500">Gắn tài khoản cho ví Tiết kiệm ở Trang chủ để theo dõi tiến độ tiết kiệm.</p>
           )}
         </section>
       )}
 
       <section className="card p-4">
         <h2 className="text-lg font-extrabold">Theo danh mục</h2>
-        <p className="text-sm text-ink-500">Chạm để đặt mức tối đa mỗi tháng</p>
+        <p className="text-sm text-ink-500">Đặt mức tối đa ở Sửa kế hoạch</p>
         <ul className="mt-3 flex flex-col gap-3">
           {budgetRows.map(({ category, spent, budget }) => (
             <li key={category.id}>
-              <button type="button" onClick={() => setBudgetFor(category)} className="flex w-full items-center gap-3 text-left">
+              <div className="flex w-full items-center gap-3">
                 <CategoryIcon category={category} categories={cats} size={36} />
                 <span className="min-w-0 flex-1">
                   <span className="flex justify-between text-sm">
@@ -207,24 +213,10 @@ export function MonthPlanDetail() {
                   </span>
                   {budget ? <Progress value={spent} max={budget} /> : <span className="text-xs text-ink-400">Chưa đặt ngân sách</span>}
                 </span>
-              </button>
+              </div>
             </li>
           ))}
         </ul>
-        {unbudgeted.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {unbudgeted.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => setBudgetFor(c)}
-                className="rounded-xl border-2 border-dashed border-ink-200 px-3 py-1 text-xs font-bold text-ink-500"
-              >
-                + {c.name}
-              </button>
-            ))}
-          </div>
-        )}
       </section>
 
       <section className="card flex items-center gap-3 p-4">
@@ -243,8 +235,6 @@ export function MonthPlanDetail() {
       <RecapStory month={recapMonth} onClose={() => setRecapMonth(null)} />
 
       <PlanWizard open={editingPlan} month={month} today={today} onClose={() => setEditingPlan(false)} />
-      <RecurringSheet item={editingItem} categories={cats} onClose={() => setEditingItem(null)} onCreatedCategory={refresh} />
-      <BudgetSheet category={budgetFor} current={budgetFor ? (budgets.data?.get(budgetFor.id) ?? null) : null} onClose={() => setBudgetFor(null)} />
     </div>
   )
 }
@@ -285,10 +275,17 @@ function shortVnd(n: number) {
 
 /**
  * V14-12 · Hạn mức mỗi ngày, cả tháng.
- * Ngày đã qua: đã khóa hạn mức, hiện đã tiêu / hạn mức — xanh nếu trong mức, đỏ nếu vượt.
- * Hôm nay và các ngày sau: hạn mức chia lại theo hệ số từ tiền linh hoạt còn lại; chạm để đổi loại ngày.
+ * Ngày đã qua: hạn mức đã khóa, hiện đã tiêu / hạn mức — xanh nếu trong mức, đỏ nếu vượt. Chạm để xem tổng kết ngày.
+ * Hôm nay và các ngày sau: hạn mức chia lại theo hệ số từ tiền linh hoạt còn lại. Nhấn giữ để chọn loại ngày.
  */
-function DailyLimits(props: { days: DayPlan[]; kinds: DayKindsConfig; startDay: string; onTap: (d: DayPlan) => void }) {
+function DailyLimits(props: {
+  days: DayPlan[]
+  kinds: DayKindsConfig
+  startDay: string
+  onOpen: (d: DayPlan) => void
+  onLong: (d: DayPlan) => void
+  onHint: () => void
+}) {
   const lead = props.days.length ? (new Date(`${props.days[0].date}T12:00:00+07:00`).getUTCDay() + 6) % 7 : 0
   return (
     <section className="card p-4">
@@ -302,45 +299,9 @@ function DailyLimits(props: { days: DayPlan[]; kinds: DayKindsConfig; startDay: 
         {Array.from({ length: lead }, (_, k) => (
           <span key={`x${k}`} />
         ))}
-        {props.days.map((d) => {
-          const k = kindDef(props.kinds, d.kind)
-          const beforePlan = d.date < props.startDay
-          const settled = d.past || d.isToday
-          const over = settled && !beforePlan && d.spent > d.planned
-          const style = settled
-            ? beforePlan
-              ? { background: '#f7f6f2', borderColor: '#e2e0d8', color: '#888780' }
-              : over
-                ? { background: '#FCEBEB', borderColor: '#F09595', color: '#A32D2D' }
-                : { background: '#E1F5EE', borderColor: '#9FE1CB', color: '#0B5C48' }
-            : kindStyle(k)
-          return (
-            <motion.button
-              key={d.date}
-              type="button"
-              disabled={d.past}
-              whileTap={d.past ? undefined : { scale: 0.9 }}
-              onClick={() => props.onTap(d)}
-              style={style}
-              className={`relative flex min-h-[3.6rem] flex-col items-center justify-between rounded-xl border-2 px-0.5 py-1 ${d.isToday ? 'ring-2 ring-brand-400 ring-offset-1' : ''}`}
-            >
-              <span className="flex w-full items-center justify-between px-0.5">
-                <span className="text-[10px] leading-none font-extrabold">{Number(d.date.slice(8))}</span>
-                {d.past ? <Lock size={9} strokeWidth={3} className="opacity-60" /> : createElement(iconOf(k), { size: 11, strokeWidth: 2.6 })}
-              </span>
-              {settled && !beforePlan ? (
-                <span className="num flex flex-col leading-none">
-                  <span className="text-[11px] font-extrabold">{shortVnd(d.spent)}</span>
-                  <span className="text-[9px] font-bold opacity-70">/{shortVnd(d.planned)}</span>
-                </span>
-              ) : beforePlan ? (
-                <span className="num text-[10px] font-bold">{d.spent ? shortVnd(d.spent) : '–'}</span>
-              ) : (
-                <span className="num text-[11px] font-extrabold">{shortVnd(d.planned)}</span>
-              )}
-            </motion.button>
-          )
-        })}
+        {props.days.map((d) => (
+          <DayCell key={d.date} d={d} kinds={props.kinds} beforePlan={d.date < props.startDay} onOpen={props.onOpen} onLong={props.onLong} onHint={props.onHint} />
+        ))}
       </div>
       <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-ink-500">
         <span className="inline-flex items-center gap-1">
@@ -356,5 +317,54 @@ function DailyLimits(props: { days: DayPlan[]; kinds: DayKindsConfig; startDay: 
         ))}
       </div>
     </section>
+  )
+}
+
+function DayCell(props: {
+  d: DayPlan
+  kinds: DayKindsConfig
+  beforePlan: boolean
+  onOpen: (d: DayPlan) => void
+  onLong: (d: DayPlan) => void
+  onHint: () => void
+}) {
+  const { d, beforePlan } = props
+  const k = kindDef(props.kinds, d.kind)
+  const settled = d.past || d.isToday
+  const over = settled && !beforePlan && d.spent > d.planned
+  const press = useLongPress(
+    () => !d.past && props.onLong(d),
+    () => (settled ? props.onOpen(d) : props.onHint()),
+  )
+  const style = settled
+    ? beforePlan
+      ? { background: '#f7f6f2', borderColor: '#e2e0d8', color: '#888780' }
+      : over
+        ? { background: '#FCEBEB', borderColor: '#F09595', color: '#A32D2D' }
+        : { background: '#E1F5EE', borderColor: '#9FE1CB', color: '#0B5C48' }
+    : kindStyle(k)
+  return (
+    <motion.button
+      type="button"
+      whileTap={{ scale: 0.92 }}
+      {...press}
+      style={{ ...style, touchAction: 'manipulation' }}
+      className={`relative flex min-h-[3.6rem] flex-col items-center justify-between rounded-xl border-2 px-0.5 py-1 ${d.isToday ? 'ring-2 ring-brand-400 ring-offset-1' : ''}`}
+    >
+      <span className="flex w-full items-center justify-between px-0.5">
+        <span className="text-[10px] leading-none font-extrabold">{Number(d.date.slice(8))}</span>
+        {d.past ? <Lock size={9} strokeWidth={3} className="opacity-60" /> : createElement(iconOf(k), { size: 11, strokeWidth: 2.6 })}
+      </span>
+      {settled && !beforePlan ? (
+        <span className="num flex flex-col leading-none">
+          <span className="text-[11px] font-extrabold">{shortVnd(d.spent)}</span>
+          <span className="text-[9px] font-bold opacity-70">/{shortVnd(d.planned)}</span>
+        </span>
+      ) : beforePlan ? (
+        <span className="num text-[10px] font-bold">{d.spent ? shortVnd(d.spent) : '–'}</span>
+      ) : (
+        <span className="num text-[11px] font-extrabold">{shortVnd(d.planned)}</span>
+      )}
+    </motion.button>
   )
 }

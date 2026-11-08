@@ -1,8 +1,12 @@
 // Gửi Web Push từ Edge Function (chỉ chạy phía server, Deno).
 import webpush from 'npm:web-push@3.6.7'
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
+import { serviceClient } from './supabase.ts'
 
 export type PushMessage = { title: string; body: string; url?: string }
+
+/** V14-17 · loại thông báo lưu vào trang Thông báo trong app */
+export type NotificationKind = 'transaction' | 'fund' | 'reminder' | 'system'
 
 type SubscriptionRow = { id: string; endpoint: string; p256dh: string; auth: string }
 
@@ -26,7 +30,15 @@ export async function sendPushToUser(
   db: SupabaseClient,
   userId: string,
   message: PushMessage,
+  /** V14-17: lưu vào trang Thông báo (kể cả khi người dùng chưa bật thông báo đẩy). Bỏ trống = không lưu (gửi thử). */
+  log?: NotificationKind,
 ): Promise<{ sent: number; removed: number; failed: number }> {
+  if (log) {
+    const { error: logError } = await serviceClient()
+      .from('notifications')
+      .insert({ user_id: userId, kind: log, title: message.title, body: message.body, url: message.url ?? null })
+    if (logError) console.error('notification log', logError.message)
+  }
   configure()
   const { data, error } = await db
     .from('push_subscriptions')

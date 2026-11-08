@@ -1,28 +1,32 @@
 import { motion } from 'motion/react'
 import { useId } from 'react'
 
-export type SafeMood = 'idle' | 'happy' | 'wow'
+/**
+ * Nét mặt của Két (V14): hóm hỉnh, cà khịa chứ không dễ thương.
+ * smirk: nhếch mép, một bên mày nhướn · laugh: cười hô hố · judge: liếc xéo phán xét · shock: há hốc
+ */
+export type SafeMood = 'smirk' | 'laugh' | 'judge' | 'shock'
 
 /**
- * V14 · Linh vật Titan: chiếc két sắt làm bằng titan (xám bạc ánh xanh, vân xước kim loại),
- * mặt trước là cửa két có đôi mắt, má hồng, núm xoay mật mã và tay nắm. Lơ lửng nhẹ như ví / thẻ VCB.
+ * V14 · Linh vật Titan: "Két", chiếc két sắt bằng titan (xám bạc ánh xanh, vân xước kim loại).
+ * Mặt trước là cửa két: mắt mí sụp, mày nhướn, miệng nhếch; núm xoay mật mã và tay nắm. Lơ lửng nhẹ.
  */
 export function TitanSafe(props: { size?: number; mood?: SafeMood; float?: boolean; className?: string }) {
   const size = props.size ?? 120
-  const mood = props.mood ?? 'idle'
+  const mood = props.mood ?? 'smirk'
   const id = useId().replace(/:/g, '')
   const g = (n: string) => `${n}-${id}`
+  const ink = '#1F2933'
 
   return (
     <motion.div
       className={props.className}
       style={{ width: size, height: size * 1.08 }}
-      animate={props.float === false ? undefined : { y: [0, -5, 0], rotate: [-1.5, 1.5, -1.5] }}
-      transition={{ duration: 3.6, repeat: Infinity, ease: 'easeInOut' }}
+      animate={props.float === false ? undefined : mood === 'laugh' ? { y: [0, -6, 0, -4, 0], rotate: [-3, 3, -3] } : { y: [0, -5, 0], rotate: [-1.5, 1.5, -1.5] }}
+      transition={{ duration: mood === 'laugh' ? 1.2 : 3.6, repeat: Infinity, ease: 'easeInOut' }}
     >
-      <svg viewBox="0 0 200 216" width="100%" height="100%" role="img" aria-label="Linh vật két sắt Titan">
+      <svg viewBox="0 0 200 216" width="100%" height="100%" role="img" aria-label="Két, linh vật của Titan">
         <defs>
-          {/* thân titan: xám bạc ánh xanh */}
           <linearGradient id={g('body')} x1="0" y1="0" x2="1" y2="1">
             <stop offset="0" stopColor="#EEF2F5" />
             <stop offset="0.45" stopColor="#C3CCD4" />
@@ -37,32 +41,22 @@ export function TitanSafe(props: { size?: number; mood?: SafeMood; float?: boole
             <stop offset="0.6" stopColor="#A9B4BE" />
             <stop offset="1" stopColor="#6E7A86" />
           </radialGradient>
-          {/* vân xước kim loại */}
           <pattern id={g('brush')} width="6" height="200" patternUnits="userSpaceOnUse" patternTransform="rotate(8)">
             <rect width="1" height="200" fill="#ffffff" opacity="0.18" />
           </pattern>
         </defs>
 
-        {/* bóng đổ */}
         <ellipse cx="100" cy="208" rx="62" ry="6" fill="#000" opacity="0.12" />
-
-        {/* chân */}
         <rect x="38" y="182" width="26" height="18" rx="6" fill="#6E7A86" />
         <rect x="136" y="182" width="26" height="18" rx="6" fill="#6E7A86" />
 
-        {/* thân */}
         <rect x="18" y="14" width="164" height="174" rx="30" fill={`url(#${g('body')})`} stroke="#5E6A75" strokeWidth="4" />
         <rect x="18" y="14" width="164" height="174" rx="30" fill={`url(#${g('brush')})`} />
-        {/* ánh sáng cạnh trên */}
         <path d="M44 22 H150 a24 24 0 0 1 20 12" fill="none" stroke="#fff" strokeWidth="5" strokeLinecap="round" opacity="0.7" />
-
-        {/* bản lề */}
         <rect x="24" y="52" width="10" height="22" rx="4" fill="#7D8995" />
         <rect x="24" y="128" width="10" height="22" rx="4" fill="#7D8995" />
 
-        {/* cửa két */}
         <rect x="38" y="34" width="124" height="134" rx="20" fill={`url(#${g('door')})`} stroke="#6E7A86" strokeWidth="3.5" />
-        {/* đinh tán 4 góc */}
         {[
           [50, 46],
           [150, 46],
@@ -72,53 +66,89 @@ export function TitanSafe(props: { size?: number; mood?: SafeMood; float?: boole
           <circle key={`${x}-${y}`} cx={x} cy={y} r="3.2" fill="#7D8995" />
         ))}
 
-        {/* mắt */}
-        {mood === 'happy' ? (
-          <>
-            <path d="M66 82 q11 -12 22 0" fill="none" stroke="#1F2933" strokeWidth="6" strokeLinecap="round" />
-            <path d="M112 82 q11 -12 22 0" fill="none" stroke="#1F2933" strokeWidth="6" strokeLinecap="round" />
-          </>
-        ) : (
-          <>
-            <ellipse cx="77" cy="80" rx={mood === 'wow' ? 11 : 10} ry={mood === 'wow' ? 13 : 12} fill="#1F2933" />
-            <ellipse cx="123" cy="80" rx={mood === 'wow' ? 11 : 10} ry={mood === 'wow' ? 13 : 12} fill="#1F2933" />
-            <circle cx="81" cy="75" r="3.6" fill="#fff" />
-            <circle cx="127" cy="75" r="3.6" fill="#fff" />
-            <circle cx="74" cy="86" r="1.6" fill="#fff" opacity="0.8" />
-            <circle cx="120" cy="86" r="1.6" fill="#fff" opacity="0.8" />
-          </>
-        )}
-
-        {/* má hồng */}
-        <ellipse cx="62" cy="100" rx="9" ry="5.5" fill="#F4A3B4" opacity="0.75" />
-        <ellipse cx="138" cy="100" rx="9" ry="5.5" fill="#F4A3B4" opacity="0.75" />
-
-        {/* miệng */}
-        {mood === 'wow' ? (
-          <ellipse cx="100" cy="104" rx="7" ry="8" fill="#1F2933" />
-        ) : (
-          <path d="M90 99 q10 11 20 0" fill="none" stroke="#1F2933" strokeWidth="5" strokeLinecap="round" />
-        )}
+        <Face mood={mood} ink={ink} lid={`url(#${g('door')})`} />
 
         {/* núm xoay mật mã */}
-        <g transform="translate(100 140)">
-          <circle r="19" fill={`url(#${g('dial')})`} stroke="#5E6A75" strokeWidth="3" />
+        <g transform="translate(100 142)">
+          <circle r="18" fill={`url(#${g('dial')})`} stroke="#5E6A75" strokeWidth="3" />
           {Array.from({ length: 12 }, (_, i) => (
-            <line key={i} x1="0" y1="-15" x2="0" y2={i % 3 === 0 ? -10 : -12.5} stroke="#4B5661" strokeWidth="1.6" transform={`rotate(${i * 30})`} />
+            <line key={i} x1="0" y1="-14" x2="0" y2={i % 3 === 0 ? -9 : -11.5} stroke="#4B5661" strokeWidth="1.6" transform={`rotate(${i * 30})`} />
           ))}
-          <circle r="6" fill="#5E6A75" />
-          <circle r="2.4" cx="-1.5" cy="-1.5" fill="#C3CCD4" />
+          <circle r="5.5" fill="#5E6A75" />
         </g>
-
-        {/* tay nắm */}
-        <rect x="140" y="124" width="9" height="32" rx="4.5" fill="#5E6A75" />
-        <rect x="142" y="126" width="3" height="20" rx="1.5" fill="#C3CCD4" opacity="0.8" />
-
-        {/* chữ Ti khắc trên nóc (ký hiệu nguyên tố titan) */}
+        <rect x="140" y="126" width="9" height="32" rx="4.5" fill="#5E6A75" />
+        <rect x="142" y="128" width="3" height="20" rx="1.5" fill="#C3CCD4" opacity="0.8" />
         <text x="100" y="31" textAnchor="middle" fontSize="11" fontWeight="800" fill="#5E6A75" fontFamily="ui-sans-serif, system-ui" opacity="0.85">
           Ti · 22
         </text>
       </svg>
     </motion.div>
+  )
+}
+
+function Face({ mood, ink, lid }: { mood: SafeMood; ink: string; lid: string }) {
+  if (mood === 'laugh')
+    return (
+      <g>
+        {/* mày nhướn cao */}
+        <path d="M62 62 q12 -9 26 -2" fill="none" stroke={ink} strokeWidth="5" strokeLinecap="round" />
+        <path d="M112 60 q14 -7 26 2" fill="none" stroke={ink} strokeWidth="5" strokeLinecap="round" />
+        {/* mắt nhắm tịt vì cười: > < */}
+        <path d="M66 74 l14 7 l-14 7" fill="none" stroke={ink} strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M134 74 l-14 7 l14 7" fill="none" stroke={ink} strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" />
+        {/* miệng há to cười hô hố */}
+        <path d="M76 98 q24 4 48 0 q-4 24 -24 24 q-20 0 -24 -24z" fill={ink} />
+        <path d="M86 112 q14 -6 28 0 q-6 9 -14 9 q-8 0 -14 -9z" fill="#E86A6A" />
+        <path d="M80 99 h40" stroke="#fff" strokeWidth="4" strokeLinecap="round" />
+      </g>
+    )
+  if (mood === 'shock')
+    return (
+      <g>
+        <path d="M62 56 q12 -8 24 -4" fill="none" stroke={ink} strokeWidth="5" strokeLinecap="round" />
+        <path d="M114 52 q12 -4 24 4" fill="none" stroke={ink} strokeWidth="5" strokeLinecap="round" />
+        <circle cx="76" cy="80" r="13" fill="#fff" stroke={ink} strokeWidth="3.5" />
+        <circle cx="124" cy="80" r="13" fill="#fff" stroke={ink} strokeWidth="3.5" />
+        <circle cx="76" cy="80" r="4.5" fill={ink} />
+        <circle cx="124" cy="80" r="4.5" fill={ink} />
+        <ellipse cx="100" cy="112" rx="9" ry="11" fill={ink} />
+      </g>
+    )
+  if (mood === 'judge')
+    return (
+      <g>
+        {/* mày chau, liếc xéo */}
+        <path d="M62 64 l26 6" fill="none" stroke={ink} strokeWidth="5" strokeLinecap="round" />
+        <path d="M112 70 l26 -6" fill="none" stroke={ink} strokeWidth="5" strokeLinecap="round" />
+        <Eye cx={76} pupil={-5} lidTo={0.55} ink={ink} lid={lid} />
+        <Eye cx={124} pupil={-5} lidTo={0.55} ink={ink} lid={lid} />
+        <path d="M86 108 q14 -4 28 2" fill="none" stroke={ink} strokeWidth="5" strokeLinecap="round" />
+      </g>
+    )
+  // smirk: một bên mày nhướn, mí sụp, nhếch mép
+  return (
+    <g>
+      <path d="M62 66 q12 -3 26 0" fill="none" stroke={ink} strokeWidth="5" strokeLinecap="round" />
+      <path d="M112 62 q14 -10 26 -4" fill="none" stroke={ink} strokeWidth="5" strokeLinecap="round" />
+      <Eye cx={76} pupil={3} lidTo={0.5} ink={ink} lid={lid} />
+      <Eye cx={124} pupil={3} lidTo={0.3} ink={ink} lid={lid} />
+      <path d="M84 106 q16 6 32 -8" fill="none" stroke={ink} strokeWidth="5" strokeLinecap="round" />
+      <path d="M115 95 q4 2 3 6" fill="none" stroke={ink} strokeWidth="3" strokeLinecap="round" />
+    </g>
+  )
+}
+
+/** Mắt tròng trắng, con ngươi lệch (pupil), mí trên sụp xuống theo tỉ lệ lidTo (0 = mở hết, 1 = nhắm) */
+function Eye(props: { cx: number; pupil: number; lidTo: number; ink: string; lid: string }) {
+  const cy = 82
+  const r = 11
+  const lidY = cy - r + 2 * r * props.lidTo
+  return (
+    <g>
+      <circle cx={props.cx} cy={cy} r={r} fill="#fff" stroke={props.ink} strokeWidth="3.5" />
+      <circle cx={props.cx + props.pupil} cy={cy + 3} r="5" fill={props.ink} />
+      <path d={`M${props.cx - r - 2} ${cy - r - 3} H${props.cx + r + 2} V${lidY} H${props.cx - r - 2}z`} fill={props.lid} />
+      <path d={`M${props.cx - r - 1} ${lidY} H${props.cx + r + 1}`} stroke={props.ink} strokeWidth="4" strokeLinecap="round" />
+    </g>
   )
 }
