@@ -13,6 +13,7 @@ import { AnimatedVnd } from '../../ui/AnimatedNumber'
 import { PushBanner } from '../push/PushBanner'
 import { CashTab } from './CashTab'
 import { DailyBar } from './DailyBar'
+import { CashLimitNote } from '../plan/CashLimitNote'
 import type { EntryType } from './QuickAddBar'
 import { DayKindMenu } from './DayKindMenu'
 import { VcbTab } from './VcbTab'
@@ -41,7 +42,7 @@ export function HomeScreen(props: { onOpenPlan: () => void; onOpenNotifications:
   const pending = usePendingCount()
   const [hour] = useState(vnHour)
   const { today } = useVnDays()
-  const { ready: planReady, result: plan, dayKinds, kinds, month } = usePlan(today)
+  const { ready: planReady, result: plan, actual, dayKinds, kinds, month } = usePlan(today)
   const [tab, setTab] = useState<HomeTab>('bank')
   const [creatingFund, setCreatingFund] = useState(false)
   const funds = fundsOf(wallets.data)
@@ -92,6 +93,7 @@ export function HomeScreen(props: { onOpenPlan: () => void; onOpenNotifications:
             <DayKindMenu today={today} month={month} current={todayKind} kinds={kinds} />
           </div>
           <DailyBar spent={plan.todaySpent} limit={plan.todayLimit} />
+          {plan.cashLimit && <CashLimitNote limit={plan.cashLimit} sources={actual?.sources ?? []} compact />}
         </motion.section>
       ) : (
         <motion.section {...rise(1)} className="shrink-0 rounded-[1.75rem] border-b-[6px] border-brand-600 bg-brand-400 px-5 pt-4 pb-4 text-white">

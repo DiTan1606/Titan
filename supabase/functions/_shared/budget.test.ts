@@ -105,7 +105,7 @@ describe('computePlan – hũ dư (V11-5) và hôm nay', () => {
     expect(p.todayLeft).toBeLessThan(0)
   })
 
-  it('lập kế hoạch giữa tháng → các ngày trước không tính vào hũ dư, nhưng tiền đã chi vẫn bị trừ', () => {
+  it('lập kế hoạch giữa tháng (V16) → các ngày trước không có hạn mức và không trừ tiền đã chi', () => {
     const p = computePlan({
       ...base,
       today: '2026-11-07',
@@ -113,9 +113,9 @@ describe('computePlan – hũ dư (V11-5) và hôm nay', () => {
       spends: [{ date: '2026-11-03', amount: 240_000, categoryId: 'x', parentId: null }],
     })
     expect(p.surplus).toBe(0)
-    expect(p.flexibleSpent).toBe(240_000)
-    // 24 ngày còn lại chia đều phần còn lại
-    expect(p.todayLimit).toBe(Math.floor((p.flexibleBudget - 240_000) / 24 / 1000) * 1000)
+    expect(p.flexibleSpent).toBe(0)
+    // 24 ngày còn lại chia đều cả phần tiền linh hoạt (tiền chi trước đó đã nằm sẵn trong số dư lúc bắt đầu)
+    expect(p.todayLimit).toBe(Math.floor(p.flexibleBudget / 24 / 1000) * 1000)
   })
 
   it('hết tiền linh hoạt → hạn mức 0, không âm', () => {

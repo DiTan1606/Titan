@@ -109,9 +109,28 @@ export type PlanInput = {
    * không tính lại theo kiểu ngày hiện tại — đổi kế hoạch tương lai không làm ngày cũ bị "vượt mức" oan.
    */
   frozen?: Record<string, number>
+  /** V16 · "Dư tháng trước": số dư VCB + tiền mặt lúc bắt đầu kế hoạch, cộng vào tiền linh hoạt */
+  opening?: number
+  /** V16 · Hạn mức theo dòng tiền: không cho tiêu quá số tiền thật đang có trước mỗi đợt tiền về */
+  cashflow?: CashflowInput
 }
 
-export type DayPlan = { date: string; kind: DayKind; planned: number; spent: number; past: boolean; isToday: boolean }
+export type CashflowInput = {
+  /** số dư VCB + tiền mặt lúc này (đã trừ mọi khoản đã chi, kể cả hôm nay) */
+  balance: number
+  /** tiền đệm: khoản tối thiểu không bao giờ tính để tiêu */
+  buffer: number
+  /** tiền sắp về theo kế hoạch: ngày dự kiến ("YYYY-MM-DD"; null = chưa biết, coi như cuối tháng) + số tiền còn chờ */
+  incomes: { day: string | null; amount: number }[]
+  /** tiền tiết kiệm còn phải chuyển trong tháng (tính vào cuối tháng) */
+  savingsLeft: number
+}
+
+/** Hạn mức hôm nay bị bóp vì tiền thật không đủ tới đợt tiền về `until` (null = tới cuối tháng) */
+export type CashLimit = { until: string | null; planLimit: number; available: number }
+
+/** before = ngày trước khi lập kế hoạch (chưa dùng Titan): không có hạn mức, không tính chi tiêu */
+export type DayPlan = { date: string; kind: DayKind; planned: number; spent: number; past: boolean; isToday: boolean; before?: boolean }
 
 export type FixedStatus = FixedItem & { paid: number; done: boolean }
 
@@ -131,6 +150,8 @@ export type PlanResult = {
   surplus: number
   daysLeft: number
   days: DayPlan[]
+  /** V16 · có khi hạn mức hôm nay bị bóp theo dòng tiền */
+  cashLimit: CashLimit | null
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -151,13 +172,15 @@ export function computePlan(input: PlanInput): PlanResult {
   const kindOf = (d: string): DayKind => input.dayKinds[d] ?? 'normal'
   const table = input.weights ?? DAY_WEIGHT
   const weightOf = (k: DayKind) => table[k] ?? 1
+  // V16: kế hoạch tính từ ngày lập — chi tiêu trước đó đã nằm sẵn trong số dư lúc bắt đầu, không trừ lại
+  const spends = input.startDay ? input.spends.filter((s) => s.date >= input.startDay!) : input.spends
 
   // Khoản cố định: chi có danh mục (hoặc danh mục cha) trùng danh mục của khoản cố định (V11-3)
   const fixedCats = new Set(input.fixed.map((f) => f.categoryId).filter((c): c is string => !!c))
   const isFixed = (s: Spend) => (!!s.categoryId && fixedCats.has(s.categoryId)) || (!!s.parentId && fixedCats.has(s.parentId))
 
   const spentByFixedCat = new Map<string, number>()
-  for (const s of input.spends) {
+  for (const s of spends) {
     if (!isFixed(s)) continue
     const key = s.categoryId && fixedCats.has(s.categoryId) ? s.categoryId : s.parentId!
     spentByFixedCat.set(key, (spentByFixedCat.get(key) ?? 0) + s.amount)
@@ -175,11 +198,11 @@ export function computePlan(input: PlanInput): PlanResult {
   const fixedTotal = input.fixed.reduce((s, f) => s + f.amount, 0)
   const fixedPaid = fixedItems.reduce((s, f) => s + f.paid, 0)
 
-  const flexibleBudget = input.income - fixedTotal - input.savings
+  const flexibleBudget = input.income + (input.opening ?? 0) - fixedTotal - input.savings
 
   // Chi linh hoạt theo ngày
   const spentByDay = new Map<string, number>()
-  for (const s of input.spends) {
+  for (const s of spends) {
     if (isFixed(s)) continue
     spentByDay.set(s.date, (spentByDay.get(s.date) ?? 0) + s.amount)
   }
@@ -195,9 +218,8 @@ export function computePlan(input: PlanInput): PlanResult {
     const isToday = d === input.today
     const spent = spentByDay.get(d) ?? 0
     if (past && input.startDay && d < input.startDay) {
-      // Trước khi lập kế hoạch: tiền đã chi vẫn trừ vào tiền linh hoạt, nhưng không có hạn mức để so
-      plans.push({ date: d, kind: kindOf(d), planned: 0, spent, past, isToday })
-      spentSoFar += spent
+      // Trước khi lập kế hoạch (V16): không hạn mức, không tính chi tiêu
+      plans.push({ date: d, kind: kindOf(d), planned: 0, spent: 0, past, isToday, before: true })
       continue
     }
     if (past || isToday) {
@@ -212,17 +234,40 @@ export function computePlan(input: PlanInput): PlanResult {
     }
   }
 
+  // V16 · Dòng tiền: hạn mức hôm nay không được vượt phần tiền thật chia cho các ngày tới đợt tiền về kế tiếp
+  let cashLimit: CashLimit | null = null
+  let cashUnit: { until: string | null; unit: number } | null = null
+  if (input.cashflow && days.includes(input.today)) {
+    const cap = cashCap(input, days, kindOf, weightOf, fixedItems, spentByDay.get(input.today) ?? 0)
+    if (cap && cap.available < todayLimit) {
+      cashUnit = { until: cap.until, unit: cap.unit }
+      cashLimit = { until: cap.until, planLimit: todayLimit, available: cap.available }
+      todayLimit = cap.available
+      const p = plans.find((x) => x.isToday)
+      if (p) p.planned = todayLimit
+    }
+  }
+
   // Ngày tương lai: chia phần còn lại SAU hôm nay (nếu hôm nay chưa tiêu hết hạn mức thì giữ chỗ cho hôm nay)
   const todaySpent = spentByDay.get(input.today) ?? 0
   const spentBeforeToday = spentSoFar - todaySpent
   const afterToday = Math.max(0, flexibleBudget - spentBeforeToday - Math.max(todayLimit, todaySpent))
   const future = days.filter((d) => d > input.today)
-  const futureWeight = future.reduce((s, d) => s + weightOf(kindOf(d)), 0)
+  // Các ngày trước đợt tiền về đang bị bóp: tiêu theo mức tiền thật; phần còn lại chia cho các ngày sau đó
+  const squeezed = (d: string) => !!cashUnit && (cashUnit.until === null || d < cashUnit.until)
+  const squeezedTotal = future.filter(squeezed).reduce((s, d) => s + roundK(cashUnit!.unit * weightOf(kindOf(d))), 0)
+  const rest = future.filter((d) => !squeezed(d))
+  const restWeight = rest.reduce((s, d) => s + weightOf(kindOf(d)), 0)
+  const restMoney = Math.max(0, afterToday - squeezedTotal)
   for (const d of future) {
     plans.push({
       date: d,
       kind: kindOf(d),
-      planned: futureWeight ? roundK((afterToday * weightOf(kindOf(d))) / futureWeight) : 0,
+      planned: squeezed(d)
+        ? roundK(cashUnit!.unit * weightOf(kindOf(d)))
+        : restWeight
+          ? roundK((restMoney * weightOf(kindOf(d))) / restWeight)
+          : 0,
       spent: 0,
       past: false,
       isToday: false,
@@ -241,7 +286,55 @@ export function computePlan(input: PlanInput): PlanResult {
     surplus,
     daysLeft: future.length + 1,
     days: plans,
+    cashLimit,
   }
+}
+
+/**
+ * V16 · "Nút cổ chai" dòng tiền. Với mỗi đợt tiền sắp về (và mốc cuối tháng), tiền dùng được từ hôm nay tới trước đợt đó
+ * = số dư − tiền đệm − khoản cố định chưa trả tới hạn trước đó (+ tiết kiệm còn chuyển, ở mốc cuối tháng)
+ * + các đợt tiền về trước đó + phần đã chi linh hoạt hôm nay (số dư đã trừ rồi). Chia theo hệ số các ngày trong khoảng;
+ * phần của hôm nay ở khoảng chặt nhất là mức tối đa hôm nay được tiêu.
+ */
+function cashCap(
+  input: PlanInput,
+  days: string[],
+  kindOf: (d: string) => DayKind,
+  weightOf: (k: DayKind) => number,
+  fixed: FixedStatus[],
+  todaySpentFlex: number,
+): { until: string | null; available: number; unit: number } | null {
+  const cf = input.cashflow!
+  const today = input.today
+  const last = days[days.length - 1]
+  const END = '9999-12-31'
+  // Đợt tiền về: chưa rõ ngày → cuối tháng; trễ hẹn (ngày ≤ hôm nay mà chưa về) → coi như về ngày mai
+  const tomorrow = days[days.indexOf(today) + 1] ?? END
+  const incomes = cf.incomes
+    .filter((x) => x.amount > 0)
+    .map((x) => ({ day: !x.day || x.day > last ? END : x.day <= today ? tomorrow : x.day, amount: x.amount }))
+  const unpaid = fixed
+    .filter((f) => f.amount > f.paid)
+    .map((f) => ({ day: f.dueDay ? `${today.slice(0, 8)}${String(Math.min(f.dueDay, days.length)).padStart(2, '0')}` : last, amount: f.amount - f.paid }))
+  const marks = [...new Set(incomes.map((x) => x.day).filter((d) => d !== END)), END].sort()
+  const wToday = weightOf(kindOf(today))
+  let best: { until: string | null; available: number; unit: number } | null = null
+  for (const m of marks) {
+    const span = days.filter((d) => d >= today && d < m)
+    const weight = span.reduce((s, d) => s + weightOf(kindOf(d)), 0)
+    if (!weight) continue
+    const money =
+      cf.balance -
+      cf.buffer +
+      todaySpentFlex -
+      unpaid.filter((f) => f.day < m).reduce((s, f) => s + f.amount, 0) -
+      (m === END ? cf.savingsLeft : 0) +
+      incomes.filter((x) => x.day < m).reduce((s, x) => s + x.amount, 0)
+    const unit = Math.max(0, money / weight)
+    const available = roundK(unit * wToday)
+    if (!best || available < best.available) best = { until: m === END ? null : m, available, unit }
+  }
+  return best
 }
 
 /** Ngân sách danh mục cấp 1: đã chi bao nhiêu trong tháng */

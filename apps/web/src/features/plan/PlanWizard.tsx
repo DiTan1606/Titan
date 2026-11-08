@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { createElement, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { computePlan, type DayKind, type DayKindsConfig, dayKindsConfig, kindDef, monthDays, spentByParent, weightsOf } from '@shared/budget.ts'
+import { bufferOf, planStartDay } from '@shared/cashflow.ts'
 import { MoneyInput } from '../../components/MoneyInput'
 import { type SafeMood, TitanSafe } from '../../components/TitanSafe'
 import {
@@ -16,6 +17,7 @@ import {
   useMonthIncome,
   useMonthPlan,
   useMonthSpends,
+  useOpeningBalance,
   useDayLimits,
   useProfile,
   useRecurringItems,
@@ -28,6 +30,7 @@ import { monthTitle } from '../../lib/period'
 import { supabase } from '../../lib/supabase'
 import { Button } from '../../ui/Button'
 import { CategoryIcon } from '../../ui/CategoryIcon'
+import { categoryLook, CAT_ICONS, tint } from '../../lib/catIcons'
 import { useToast } from '../../ui/toast-context'
 import { iconOf, kindStyle, setDayKind } from './dayKind'
 import { KindPicker } from './KindPicker'
@@ -39,7 +42,7 @@ type Step = (typeof STEPS)[number]
 
 /** Lời linh vật két Titan ở từng bước */
 const SAY: Record<Step, { text: string; mood: SafeMood }> = {
-  income: { text: 'Tiền về từ đâu khai hết ra đây. Gia đình gửi, lương, học bổng… giấu nguồn nào là tháng đó tự chịu nha.', mood: 'smirk' },
+  income: { text: 'Tiền về từ đâu, ngày nào khai hết ra đây. Lương về trễ mà tiêu trước là tui bóp hạn mức liền đó nha.', mood: 'smirk' },
   fixed: { text: 'Tiền trọ, 4G, gói AI… mấy khoản không né được. Tui xí phần trước, khỏi lỡ tay tiêu mất rồi khóc.', mood: 'judge' },
   savings: { text: 'Tiết kiệm trước rồi mới tiêu, chứ tiêu xong mới tiết kiệm thì tui đếm được bằng không đó.', mood: 'smirk' },
   days: { text: 'Ngày nào đi quẩy, ngày nào ở nhà ăn mì? Chạm vào ngày mà khai thật, tui chia tiền theo đó.', mood: 'judge' },
@@ -56,9 +59,16 @@ const TITLE: Record<Step, string> = {
   review: 'Chốt kế hoạch',
 }
 
-type Source = { key: number; name: string; amount: number | null }
+// V16: nguồn thu có ngày dự kiến nhận + danh mục thu (để tự tick khi tiền về)
+type Source = { key: number; name: string; amount: number | null; day: number | null; categoryId: string | null }
 let sourceKey = 0
-const src = (name: string, amount: number | null): Source => ({ key: ++sourceKey, name, amount })
+const src = (name: string, amount: number | null, day: number | null = null, categoryId: string | null = null): Source => ({
+  key: ++sourceKey,
+  name,
+  amount,
+  day,
+  categoryId,
+})
 
 /**
  * V14 · Lập / sửa kế hoạch tháng từng bước (giống thiết lập ban đầu), có linh vật két Titan dẫn đường:
@@ -102,20 +112,34 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
   const [savingsDraft, setSavings] = useState<number | null | undefined>(undefined)
   const [capsDraft, setCaps] = useState<Map<string, number | null> | null>(null)
   const ready = plan.isSuccess && lastIncome.isSuccess && budgets.isSuccess
+  const incomeCats = useMemo(
+    () => (categories.data ?? []).filter((c) => c.kind === 'income' && !c.parentId && !c.hidden),
+    [categories.data],
+  )
   const defaultSources = useMemo(() => {
-    if (!plan.isSuccess || !lastIncome.isSuccess) return null
+    if (!plan.isSuccess || !lastIncome.isSuccess || !categories.isSuccess) return null
+    const catOf = (name: string) => incomeCats.find((c) => c.name.toLowerCase() === name.toLowerCase())?.id ?? null
     const p = plan.data
-    if (p?.incomeSources.length) return p.incomeSources.map((x) => src(x.name, x.amount))
-    if (p) return [src('Thu nhập', p.income)]
-    if (lastIncome.data.length) return lastIncome.data.map((x) => src(x.name, x.amount))
-    return [src('Gia đình gửi', null), src('Lương', null)]
-  }, [plan.isSuccess, plan.data, lastIncome.isSuccess, lastIncome.data])
+    if (p?.incomeSources.length) return p.incomeSources.map((x) => src(x.name, x.amount, x.day, x.categoryId ?? catOf(x.name)))
+    if (p && p.income > 0) return [src('Thu nhập', p.income)]
+    if (lastIncome.data.length) return lastIncome.data.map((x) => src(x.name, x.amount, null, catOf(x.name)))
+    return [src('Gia đình gửi', null, null, catOf('Gia đình gửi')), src('Lương', null, null, catOf('Lương'))]
+  }, [plan.isSuccess, plan.data, lastIncome.isSuccess, lastIncome.data, categories.isSuccess, incomeCats])
   const sources = sourcesDraft ?? defaultSources
   const savings = savingsDraft === undefined ? (plan.data?.savings ?? 300_000) : savingsDraft
   const caps = capsDraft ?? (budgets.data ? new Map<string, number | null>(budgets.data) : null)
 
+  // V16 · Dư tháng trước: số dư VCB + tiền mặt lúc bắt đầu kế hoạch (Titan tự tính), chừa tiền đệm
+  const startDay = planStartDay(month, plan.data?.createdDay ?? today)
+  const opening = useOpeningBalance(month, startDay)
+  const buffer = bufferOf(profile.data?.settings)
+  const [carryDraft, setCarry] = useState<boolean | null>(null)
+  const carryOver = carryDraft ?? (plan.data ? plan.data.carryOver : true)
+  const carried = carryOver && opening !== null ? opening - buffer : 0
+
   const cats = categories.data ?? []
-  const income = (sources ?? []).reduce((s, x) => s + (x.amount ?? 0), 0)
+  const typedIncome = (sources ?? []).reduce((s, x) => s + (x.amount ?? 0), 0)
+  const income = typedIncome + carried
   const fixedTotal = (recurring.data ?? []).filter((r) => r.active).reduce((s, r) => s + r.amount, 0)
   // V14: để dành chỉ tính khi đã có ví tiết kiệm (tài khoản thật); chưa có thì bỏ qua, coi như 0
   const piggyReady = !!piggy?.accountSuffix
@@ -128,13 +152,14 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
   const kindOf = (d: string): DayKind => (dayPlans.data?.[d] as DayKind | undefined) ?? 'normal'
   const preview = computePlan({
     today,
-    income,
+    income: typedIncome,
+    opening: carried,
     savings: savingsUsed,
     fixed: (recurring.data ?? []).filter((r) => r.active),
     spends: monthSpends.data ?? [],
     dayKinds: dayPlans.data ?? {},
     weights: weightsOf(kinds),
-    startDay: plan.data?.createdDay ?? today,
+    startDay,
     frozen: limits.data,
   })
   const unit = preview.todayLimit / kindDef(kinds, kindOf(today)).weight
@@ -175,7 +200,9 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
   async function finish() {
     setBusy(true)
     try {
-      const clean = (sources ?? []).filter((s) => (s.amount ?? 0) > 0).map((s) => ({ name: s.name.trim() || 'Thu nhập', amount: s.amount ?? 0 }))
+      const clean = (sources ?? [])
+        .filter((s) => (s.amount ?? 0) > 0)
+        .map((s) => ({ name: s.name.trim() || 'Thu nhập', amount: s.amount ?? 0, day: s.day, category_id: s.categoryId }))
       // Tháng mới: loại ngày lấy theo Cấu hình, chưa cấu hình thì theo tháng gần nhất (V13-4)
       let dayKinds: unknown = undefined
       if (!editing) {
@@ -187,9 +214,10 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
       }
       const up = await supabase.from('month_plans').upsert({
         month,
-        income,
+        income: typedIncome,
         savings: savingsUsed,
         income_sources: clean,
+        carry_over: carryOver,
         ...(dayKinds ? { day_kinds: dayKinds } : {}),
       })
       if (up.error) throw new Error(up.error.message)
@@ -305,6 +333,29 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
                 <div className="h-40 animate-pulse rounded-2xl bg-ink-100" />
               ) : step === 'income' ? (
                 <>
+                  {/* V16 · Dư tháng trước: Titan tự tính từ số dư VCB + tiền mặt lúc bắt đầu kế hoạch */}
+                  <div className={`card flex flex-col gap-1 p-3 ${carryOver ? '' : 'opacity-70'}`}>
+                    <label className="flex items-center gap-3">
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-extrabold">Dư tháng trước</span>
+                        <span className="block text-xs text-ink-500">
+                          Số dư VCB + tiền mặt {startDay > month ? `ngày ${Number(startDay.slice(8))}/${Number(startDay.slice(5, 7))}` : 'đầu tháng'}, Titan tự tính
+                        </span>
+                      </span>
+                      <span className="num shrink-0 text-lg font-extrabold">{opening === null ? '…' : formatVnd(opening)}</span>
+                      <input
+                        type="checkbox"
+                        checked={carryOver}
+                        onChange={(e) => setCarry(e.target.checked)}
+                        aria-label="Tính dư tháng trước vào tháng này"
+                        className="size-6 shrink-0 accent-brand-500"
+                      />
+                    </label>
+                    {carryOver && buffer > 0 && (
+                      <p className="text-xs text-ink-400">Chừa {formatVnd(buffer)} tiền đệm, không tính để tiêu. Đổi ở Cấu hình.</p>
+                    )}
+                  </div>
+
                   {sources!.map((s, k) => (
                     <div key={s.key} className="card flex flex-col gap-2 p-3">
                       <div className="flex items-center gap-2">
@@ -316,18 +367,62 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
                           aria-label="Tên nguồn tiền"
                           className="h-10 min-w-0 flex-1 rounded-xl border-2 border-ink-100 px-3 font-bold outline-none focus:border-brand-300"
                         />
-                        {sources!.length > 1 && (
-                          <button
-                            type="button"
-                            aria-label="Xóa nguồn"
-                            onClick={() => setSources(sources!.filter((x) => x.key !== s.key))}
-                            className="grid size-10 shrink-0 place-items-center rounded-xl text-ink-400 active:bg-ink-100"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          aria-label="Xóa nguồn"
+                          onClick={() => setSources(sources!.filter((x) => x.key !== s.key))}
+                          className="grid size-10 shrink-0 place-items-center rounded-xl text-ink-400 active:bg-ink-100"
+                        >
+                          <Trash2 size={18} />
+                        </button>
                       </div>
-                      <MoneyInput value={s.amount} onChange={(v) => setSources(sources!.map((x) => (x.key === s.key ? { ...x, amount: v } : x)))} />
+                      <div className="flex items-center gap-2">
+                        <div className="min-w-0 flex-1">
+                          <MoneyInput value={s.amount} onChange={(v) => setSources(sources!.map((x) => (x.key === s.key ? { ...x, amount: v } : x)))} />
+                        </div>
+                        <label className="flex h-14 w-24 shrink-0 items-center gap-1 rounded-2xl border-2 border-ink-100 bg-white px-2 focus-within:border-brand-300">
+                          <span className="text-xs font-bold text-ink-400">Ngày</span>
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min={1}
+                            max={31}
+                            value={s.day ?? ''}
+                            placeholder="?"
+                            aria-label="Ngày dự kiến nhận"
+                            onChange={(e) => {
+                              const n = Number(e.target.value)
+                              setSources(sources!.map((x) => (x.key === s.key ? { ...x, day: n >= 1 && n <= 31 ? Math.floor(n) : null } : x)))
+                            }}
+                            className="num w-full min-w-0 bg-transparent text-center text-base font-extrabold outline-none placeholder:text-ink-300"
+                          />
+                        </label>
+                      </div>
+                      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
+                        {incomeCats.map((c) => {
+                          const active = s.categoryId === c.id
+                          const look = categoryLook(c, cats)
+                          return (
+                            <button
+                              key={c.id}
+                              type="button"
+                              aria-pressed={active}
+                              onClick={() => setSources(sources!.map((x) => (x.key === s.key ? { ...x, categoryId: active ? null : c.id } : x)))}
+                              className={`flex shrink-0 items-center gap-1 rounded-lg border-2 py-0.5 pr-2.5 pl-1 text-sm font-semibold ${
+                                active ? 'border-brand-400 bg-brand-50 text-brand-700' : 'border-ink-100 bg-white text-ink-600'
+                              }`}
+                            >
+                              <span className="grid size-6 place-items-center rounded-md" style={tint(look.color)}>
+                                {createElement(CAT_ICONS[look.icon] ?? Plus, { size: 13, strokeWidth: 2.4 })}
+                              </span>
+                              {c.name}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      {!s.categoryId && (s.amount ?? 0) > 0 && (
+                        <p className="text-xs text-attn-600">Chọn danh mục thu để Titan tự tick khi tiền về</p>
+                      )}
                     </div>
                   ))}
                   <button
@@ -337,7 +432,7 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
                   >
                     <Plus size={18} /> Thêm nguồn tiền
                   </button>
-                  <Total label="Tổng thu nhập dự kiến" value={income} />
+                  <Total label="Tổng tiền tháng này" value={income} />
                 </>
               ) : step === 'fixed' ? (
                 <>
@@ -383,6 +478,15 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
                           {p * 100}% thu nhập
                         </button>
                       ))}
+                      {carried > 0 && startDay === month && (
+                        <button
+                          type="button"
+                          onClick={() => setSavings(Math.floor(carried / 10_000) * 10_000)}
+                          className="rounded-xl border-2 border-brand-200 bg-brand-50 px-3 py-1.5 text-sm font-bold text-brand-700"
+                        >
+                          Cất hết dư tháng trước
+                        </button>
+                      )}
                     </div>
                     <p className="rounded-2xl bg-white p-3 text-sm text-ink-600">
                       Đây là số <b>dự kiến</b>. Mỗi lần bạn chuyển từ VCB sang ví tiết kiệm {fundAccountLabel(piggy!)}, Két ghi vào tiến độ. Cuối tháng
@@ -443,10 +547,11 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
                 </>
               ) : (
                 <div className="card p-4 text-sm">
+                  {carried !== 0 && <Line label="Dư tháng trước (đã chừa tiền đệm)" value={carried} />}
                   {(sources ?? [])
                     .filter((s) => (s.amount ?? 0) > 0)
                     .map((s) => (
-                      <Line key={s.key} label={s.name.trim() || 'Thu nhập'} value={s.amount ?? 0} />
+                      <Line key={s.key} label={`${s.name.trim() || 'Thu nhập'}${s.day ? ` · ngày ${s.day}` : ''}`} value={s.amount ?? 0} />
                     ))}
                   <Line label="Khoản cố định" value={-fixedTotal} />
                   <Line label="Tiết kiệm (dự kiến)" value={-savingsUsed} />

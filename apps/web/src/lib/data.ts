@@ -1,8 +1,9 @@
 // Truy vấn dữ liệu dùng chung (TanStack Query). RLS đảm bảo chỉ thấy dữ liệu của người đăng nhập.
 import { vnDate } from '@shared/quick-entry.ts'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { computePlan, type DayKind, dayKindsConfig, type DayKindsConfig, monthDays, monthStart, type Spend, weightsOf } from '@shared/budget.ts'
+import { bufferOf, FLOW_SELECT, type Flow, type IncomeSource, type MonthActual, monthPlan, openingBalance, toFlow, toSources } from '@shared/cashflow.ts'
 import { buildRecap, type RecapTxn } from '@shared/recap.ts'
 import { type BillCounts, walletBills } from './bills'
 import { supabase } from './supabase'
@@ -405,13 +406,18 @@ export function useMonthPlan(month: string) {
     queryKey: ['plan', 'month', month],
     queryFn: async () => {
       const row = throwIf(
-        await supabase.from('month_plans').select('income, savings, created_at, day_kinds, income_sources').eq('month', month).maybeSingle(),
+        await supabase
+          .from('month_plans')
+          .select('income, savings, created_at, day_kinds, income_sources, carry_over')
+          .eq('month', month)
+          .maybeSingle(),
       ) as {
         income: number
         savings: number
         created_at: string
         day_kinds: unknown
-        income_sources: { name: string; amount: number }[] | null
+        income_sources: unknown
+        carry_over: boolean
       } | null
       return row
         ? {
@@ -420,11 +426,38 @@ export function useMonthPlan(month: string) {
             createdDay: vnDate(new Date(row.created_at)),
             rawKinds: (row.day_kinds ?? {}) as Record<string, unknown>,
             kinds: dayKindsConfig(row.day_kinds),
-            incomeSources: (row.income_sources ?? []).map((x) => ({ name: String(x.name), amount: Number(x.amount) })),
+            incomeSources: toSources(row.income_sources) as IncomeSource[],
+            carryOver: !!row.carry_over,
           }
         : null
     },
   })
+}
+
+/** V16 · Mọi giao dịch trong tháng (chưa xóa) kèm loại ví — nguồn cho dòng tiền, dư tháng trước, nguồn thu */
+export function useMonthFlows(month: string) {
+  return useQuery({
+    queryKey: ['transactions', 'month-flows', month],
+    queryFn: async (): Promise<Flow[]> => {
+      const { start, end } = monthRange(month)
+      const rows = throwIf(
+        await supabase.from('transactions').select(FLOW_SELECT).is('deleted_at', null).gte('occurred_at', start).lt('occurred_at', end),
+      )
+      return ((rows ?? []) as unknown as Parameters<typeof toFlow>[0][]).map((r) => toFlow(r, vnDate))
+    },
+  })
+}
+
+/** Số dư VCB + tiền mặt lúc này */
+export const spendableBalance = (wallets: Wallet[] | undefined) =>
+  (wallets ?? []).filter((w) => w.kind === 'bank' || w.kind === 'cash').reduce((s, w) => s + w.balance, 0)
+
+/** V16 · Số dư VCB + tiền mặt đầu ngày `startDay` (dư tháng trước khi lập kế hoạch) */
+export function useOpeningBalance(month: string, startDay: string) {
+  const wallets = useWallets()
+  const flows = useMonthFlows(month)
+  if (!wallets.isSuccess || !flows.isSuccess) return null
+  return openingBalance(spendableBalance(wallets.data), flows.data, startDay)
 }
 
 export function useDayPlans(month: string) {
@@ -457,6 +490,7 @@ export function useMonthSpends(month: string) {
             .select('amount, occurred_at, category_id, category:categories(parent_id)')
             .is('deleted_at', null)
             .in('type', ['expense', 'borrow'])
+            .neq('source', 'reconcile') // V16: điều chỉnh số dư không phải chi tiêu
             .gte('occurred_at', start.toISOString())
             .lt('occurred_at', end.toISOString()),
         ) ?? []
@@ -504,23 +538,44 @@ export function usePlan(today: string) {
   const plan = useMonthPlan(month)
   const recurring = useRecurringItems()
   const days = useDayPlans(month)
-  const spends = useMonthSpends(month)
+  const flows = useMonthFlows(month)
   const limits = useDayLimits(month)
-  const ready = plan.isSuccess && recurring.isSuccess && days.isSuccess && spends.isSuccess && limits.isSuccess
-  const result =
+  const wallets = useWallets()
+  const profile = useProfile()
+  const ready =
+    plan.isSuccess && recurring.isSuccess && days.isSuccess && flows.isSuccess && limits.isSuccess && wallets.isSuccess && profile.isSuccess
+  // V16: cùng monthPlan với cron-notify — dư tháng trước, nguồn thu tự tick, hạn mức theo dòng tiền
+  const computed =
     ready && plan.data
-      ? computePlan({
+      ? monthPlan({
           today,
-          income: plan.data.income,
-          savings: plan.data.savings,
+          month,
+          plan: {
+            income: plan.data.income,
+            savings: plan.data.savings,
+            carryOver: plan.data.carryOver,
+            sources: plan.data.incomeSources,
+            createdDay: plan.data.createdDay,
+            weights: weightsOf(plan.data.kinds),
+          },
           fixed: recurring.data.filter((r) => r.active),
-          spends: spends.data,
           dayKinds: days.data,
-          weights: weightsOf(plan.data.kinds),
-          startDay: plan.data.createdDay,
+          flows: flows.data,
+          balance: spendableBalance(wallets.data),
+          buffer: bufferOf(profile.data.settings),
           frozen: limits.data,
         })
       : null
+  const result = computed?.result ?? null
+  const actual: MonthActual | null = computed?.actual ?? null
+  const startDay = actual?.startDay
+  const spends: Spend[] = useMemo(
+    () =>
+      (flows.data ?? [])
+        .filter((f) => (f.type === 'expense' || f.type === 'borrow') && f.source !== 'reconcile' && (!startDay || f.date >= startDay))
+        .map((f) => ({ date: f.date, amount: f.amount, categoryId: f.categoryId, parentId: f.parentId })),
+    [flows.data, startDay],
+  )
 
   // V14-12: chốt hạn mức hôm nay (ghi đè trong ngày, qua ngày mới thì DB khóa lại)
   const todayLimit = result ? Math.max(0, result.todayLimit) : null
@@ -534,7 +589,7 @@ export function usePlan(today: string) {
   }, [today, todayLimit, stored])
 
   const kinds: DayKindsConfig = plan.data?.kinds ?? dayKindsConfig(null)
-  return { month, ready, plan: plan.data ?? null, result, spends: spends.data ?? [], dayKinds: days.data ?? {}, kinds, limits: limits.data ?? {} }
+  return { month, ready, plan: plan.data ?? null, result, actual, spends, dayKinds: days.data ?? {}, kinds, limits: limits.data ?? {} }
 }
 
 /** Danh mục cấp 2: tìm theo tên (không phân biệt hoa thường) trong danh mục cha, chưa có thì tạo */

@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { Check, Clapperboard, Lock, Pencil } from 'lucide-react'
+import { Check, Clapperboard, Lock } from 'lucide-react'
 import { motion } from 'motion/react'
 import { createElement, useState } from 'react'
 import { type DayKind, type DayKindsConfig, type DayPlan, kindDef, monthDays, spentByParent } from '@shared/budget.ts'
@@ -18,11 +18,13 @@ import { DailyBar } from '../home/DailyBar'
 import { DayKindMenu } from '../home/DayKindMenu'
 import { RecapStory } from '../recap/RecapStory'
 import { PlanWizard } from './PlanWizard'
+import { CashLimitNote } from './CashLimitNote'
+import { IncomeCard, MonthCard } from './MonthCards'
 
 /** V11 · Chi tiết kế hoạch tháng này (V14: mở từ thẻ "Xem kế hoạch tháng này" ở tab Kế hoạch) */
 export function MonthPlanDetail() {
   const { today } = useVnDays()
-  const { month, plan, result, spends, kinds, dayKinds } = usePlan(today)
+  const { month, plan, result, actual, spends, kinds, dayKinds } = usePlan(today)
   const saved = useSavingsProgress(month)
   const lastDay = today === monthDays(month).at(-1)
   const recurring = useRecurringItems()
@@ -36,7 +38,6 @@ export function MonthPlanDetail() {
   const cats = categories.data ?? []
   const activeFixed = (recurring.data ?? []).filter((r) => r.active)
   const fixedTotal = activeFixed.reduce((s, r) => s + r.amount, 0)
-  const monthLabel = `Tháng ${Number(month.slice(5, 7))}`
 
   // V14-14/15: chạm ngày (đã qua / hôm nay) xem tổng kết ngày; nhấn giữ (hôm nay / ngày sau) chọn loại ngày
   const [summaryDay, setSummaryDay] = useState<DayPlan | null>(null)
@@ -76,6 +77,7 @@ export function MonthPlanDetail() {
               <DayKindMenu today={today} month={month} current={dayKinds[today] ?? 'normal'} kinds={kinds} />
             </div>
             <DailyBar spent={result.todaySpent} limit={result.todayLimit} />
+            {result.cashLimit && <CashLimitNote limit={result.cashLimit} sources={actual?.sources ?? []} />}
             {result.surplus !== 0 && (
               <span className="mt-3 inline-flex rounded-xl bg-white/20 px-3 py-1 text-sm font-bold">
                 Hũ dư {result.surplus > 0 ? '+' : '−'}
@@ -87,36 +89,16 @@ export function MonthPlanDetail() {
           <DailyLimits
             days={result.days}
             kinds={kinds}
-            startDay={plan!.createdDay}
+            startDay={actual?.startDay ?? plan!.createdDay}
             onOpen={setSummaryDay}
             onLong={setPickDay}
             onHint={() => toast('Nhấn giữ một ngày để đổi loại ngày')}
           />
-          <DaySummarySheet day={summaryDay} kinds={kinds} beforePlan={!!summaryDay && summaryDay.date < plan!.createdDay} onClose={() => setSummaryDay(null)} />
+          <DaySummarySheet day={summaryDay} kinds={kinds} beforePlan={!!summaryDay && summaryDay.date < (actual?.startDay ?? plan!.createdDay)} onClose={() => setSummaryDay(null)} />
           <KindPicker day={pickDay?.date ?? null} current={pickDay?.kind ?? 'normal'} kinds={kinds} onPick={pickKind} onClose={() => setPickDay(null)} />
 
-          <section className="card p-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-extrabold">{monthLabel}</h2>
-              <button
-                type="button"
-                onClick={() => setEditingPlan(true)}
-                className="inline-flex items-center gap-1 rounded-xl bg-brand-50 px-3 py-1.5 text-sm font-bold text-brand-600 active:bg-brand-100"
-              >
-                <Pencil size={14} /> Sửa
-              </button>
-            </div>
-            <dl className="mt-2 text-sm">
-              <Line label="Thu nhập dự kiến" value={plan!.income} />
-              <Line label="Khoản cố định" value={-result.fixedTotal} />
-              <Line label="Tiết kiệm (dự kiến)" value={-plan!.savings} />
-              <Line label="Tiền linh hoạt" value={result.flexibleBudget} strong />
-            </dl>
-            <Progress value={result.flexibleSpent} max={Math.max(result.flexibleBudget, 1)} />
-            <p className="mt-1.5 text-xs font-semibold text-ink-500">
-              Đã chi linh hoạt {formatVnd(result.flexibleSpent)} - còn {formatVnd(Math.max(0, result.flexibleBudget - result.flexibleSpent))} cho {result.daysLeft} ngày
-            </p>
-          </section>
+          {actual && <MonthCard month={month} result={result} actual={actual} onEdit={() => setEditingPlan(true)} />}
+          {actual && <IncomeCard actual={actual} today={today} categories={cats} />}
         </>
       )}
 
@@ -235,18 +217,6 @@ export function MonthPlanDetail() {
       <RecapStory month={recapMonth} onClose={() => setRecapMonth(null)} />
 
       <PlanWizard open={editingPlan} month={month} today={today} onClose={() => setEditingPlan(false)} />
-    </div>
-  )
-}
-
-function Line(props: { label: string; value: number; strong?: boolean }) {
-  return (
-    <div className={`flex justify-between py-0.5 ${props.strong ? 'mt-1 border-t-2 border-ink-100 pt-2 font-extrabold text-ink-900' : 'text-ink-600'}`}>
-      <dt>{props.label}</dt>
-      <dd className="num font-bold">
-        {props.value < 0 ? '−' : ''}
-        {formatVnd(Math.abs(props.value))}
-      </dd>
     </div>
   )
 }

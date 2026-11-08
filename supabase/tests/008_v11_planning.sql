@@ -11,14 +11,14 @@ select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000
 do $$
 declare n int; ai uuid;
 begin
-  -- Người dùng mới: chỉ danh mục cấp 1 (V11-1), có "AI & phần mềm" và "Khác"
+  -- Người dùng mới (bộ mặc định V16): có "AI" và "Khác", 6 danh mục chi tiết có sẵn
   select count(*) into n from public.categories where parent_id is not null;
-  assert n = 0, format('Người dùng mới không nên có danh mục cấp 2, có %s', n);
-  select id into ai from public.categories where name = 'AI & phần mềm';
-  assert ai is not null, 'Thiếu danh mục AI & phần mềm';
+  assert n = 6, format('Người dùng mới phải có 6 danh mục chi tiết mặc định, có %s', n);
+  select id into ai from public.categories where name = 'AI';
+  assert ai is not null, 'Thiếu danh mục AI';
 
   -- Tự gõ danh mục cấp 2 khi duyệt
-  insert into public.categories (kind, name, parent_id) values ('expense', 'Google AI Pro', ai);
+  insert into public.categories (kind, name, parent_id) values ('expense', 'ChatGPT', ai);
 
   -- Khoản cố định, kế hoạch tháng, kiểu ngày, ngân sách
   insert into public.recurring_items (name, amount, due_day, category_id) values ('Google AI Pro', 135556, 7, ai);

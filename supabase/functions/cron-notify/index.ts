@@ -2,7 +2,8 @@
 // Xác thực bằng header x-cron-secret (= secret CRON_SECRET), không dùng JWT.
 // Body tùy chọn {"at": "<ISO>"} để giả lập thời điểm khi test; {"user_id": "..."} để chỉ chạy cho một người.
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import { computePlan, type DayKind, dayKindsConfig, monthStart, spentByParent, type Spend, weightsOf } from '../_shared/budget.ts'
+import { type DayKind, dayKindsConfig, monthStart, spentByParent, weightsOf } from '../_shared/budget.ts'
+import { bufferOf, FLOW_SELECT, monthPlan, toFlow, toSources } from '../_shared/cashflow.ts'
 import { dueReminder, MORNING_HOUR, monthStartMessage, notifySettings, type PushText, vnClock } from '../_shared/notify.ts'
 import { vnDate } from '../_shared/quick-entry.ts'
 import { timingSafeEqual } from '../_lib/crypto.ts'
@@ -90,16 +91,20 @@ async function loadPlanContext(db: SupabaseClient, userId: string, today: string
   const end = new Date(start)
   end.setMonth(end.getMonth() + 1)
 
-  const [plan, recurring, days, spendRows, pending, budgets, limits] = await Promise.all([
-    db.from('month_plans').select('income, savings, created_at, day_kinds').eq('user_id', userId).eq('month', month).maybeSingle(),
+  const [plan, recurring, days, flowRows, pending, budgets, limits, balances, profile] = await Promise.all([
+    db
+      .from('month_plans')
+      .select('income, savings, created_at, day_kinds, income_sources, carry_over')
+      .eq('user_id', userId)
+      .eq('month', month)
+      .maybeSingle(),
     db.from('recurring_items').select('id, name, amount, due_day, category_id').eq('user_id', userId).eq('active', true),
     db.from('day_plans').select('day, kind').eq('user_id', userId).gte('day', month).lt('day', vnDate(end)),
     db
       .from('transactions')
-      .select('amount, occurred_at, category_id, category:categories(parent_id)')
+      .select(FLOW_SELECT)
       .eq('user_id', userId)
       .is('deleted_at', null)
-      .in('type', ['expense', 'borrow'])
       .gte('occurred_at', start.toISOString())
       .lt('occurred_at', end.toISOString()),
     db
@@ -110,25 +115,24 @@ async function loadPlanContext(db: SupabaseClient, userId: string, today: string
       .eq('status', 'pending'),
     db.from('category_budgets').select('amount, category:categories(id, name)').eq('user_id', userId),
     db.from('day_limits').select('day, planned').eq('user_id', userId).gte('day', month).lt('day', vnDate(end)),
+    db.from('wallet_balances').select('kind, balance').eq('user_id', userId).in('kind', ['bank', 'cash']),
+    db.from('profiles').select('settings').eq('id', userId).single(),
   ])
 
-  const spends: Spend[] = ((spendRows.data ?? []) as unknown as {
-    amount: number
-    occurred_at: string
-    category_id: string | null
-    category: { parent_id: string | null } | null
-  }[]).map((r) => ({
-    date: vnDate(new Date(r.occurred_at)),
-    amount: Number(r.amount),
-    categoryId: r.category_id,
-    parentId: r.category?.parent_id ?? null,
-  }))
-
+  // V16: cùng monthPlan với app (dư tháng trước, nguồn thu, hạn mức theo dòng tiền)
+  const flows = ((flowRows.data ?? []) as unknown as Parameters<typeof toFlow>[0][]).map((r) => toFlow(r, vnDate))
   const result = plan.data
-    ? computePlan({
+    ? monthPlan({
         today,
-        income: Number(plan.data.income),
-        savings: Number(plan.data.savings),
+        month,
+        plan: {
+          income: Number(plan.data.income),
+          savings: Number(plan.data.savings),
+          carryOver: !!plan.data.carry_over,
+          sources: toSources(plan.data.income_sources),
+          createdDay: vnDate(new Date(plan.data.created_at)),
+          weights: weightsOf(dayKindsConfig(plan.data.day_kinds)),
+        },
         fixed: (recurring.data ?? []).map((r) => ({
           id: r.id,
           name: r.name,
@@ -136,13 +140,17 @@ async function loadPlanContext(db: SupabaseClient, userId: string, today: string
           dueDay: r.due_day,
           categoryId: r.category_id,
         })),
-        spends,
         dayKinds: Object.fromEntries((days.data ?? []).map((d) => [d.day, d.kind as DayKind])),
-        weights: weightsOf(dayKindsConfig(plan.data.day_kinds)),
-        startDay: vnDate(new Date(plan.data.created_at)),
+        flows,
+        balance: (balances.data ?? []).reduce((s, b) => s + Number(b.balance), 0),
+        buffer: bufferOf(profile.data?.settings as Record<string, unknown> | null),
         frozen: Object.fromEntries((limits.data ?? []).map((l) => [l.day as string, Number(l.planned)])),
-      })
+      }).result
     : null
+
+  const spends = flows
+    .filter((f) => (f.type === 'expense' || f.type === 'borrow') && f.source !== 'reconcile')
+    .map((f) => ({ date: f.date, amount: f.amount, categoryId: f.categoryId, parentId: f.parentId }))
 
   const byParent = spentByParent(spends)
   const overBudget = ((budgets.data ?? []) as unknown as { amount: number; category: { id: string; name: string } | null }[])

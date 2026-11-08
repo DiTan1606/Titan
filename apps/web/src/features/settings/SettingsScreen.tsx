@@ -1,5 +1,6 @@
 import { Bell, ChevronRight } from 'lucide-react'
 import { useUnreadCount } from '../../lib/data'
+import { BalanceCard, BufferCard } from './BalanceCards'
 import { CategoriesCard } from './CategoriesCard'
 import { DayKindsCard } from './DayKindsCard'
 import { BankAccountCard, GmailCard } from './ConnectionCards'
@@ -31,6 +32,7 @@ export function SettingsScreen(props: { onOpenNotifications: () => void }) {
       <Group title="Ngân hàng">
         <GmailCard />
         <BankAccountCard />
+        <BalanceCard />
       </Group>
 
       <Group title="Chi tiêu">
@@ -38,6 +40,7 @@ export function SettingsScreen(props: { onOpenNotifications: () => void }) {
           <DayKindsCard />
           <CategoriesCard />
         </div>
+        <BufferCard />
         <TrashCard />
       </Group>
 
@@ -50,7 +53,7 @@ export function SettingsScreen(props: { onOpenNotifications: () => void }) {
               Quyền riêng tư
             </a>
           </div>
-          <span className="rounded-xl bg-brand-50 px-3 py-1 text-sm font-extrabold text-brand-600">Titan 1.5.2</span>
+          <span className="rounded-xl bg-brand-50 px-3 py-1 text-sm font-extrabold text-brand-600">Titan 1.6.0</span>
         </section>
       </Group>
     </div>

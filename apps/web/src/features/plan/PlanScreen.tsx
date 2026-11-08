@@ -3,7 +3,8 @@ import { AnimatePresence, motion } from 'motion/react'
 import { createPortal } from 'react-dom'
 import { useEffect, useState } from 'react'
 import { monthDays } from '@shared/budget.ts'
-import { prevMonth, useMarkConfigSeen, usePastMonths, usePlan, useProfile } from '../../lib/data'
+import { fundsOf, prevMonth, useMarkConfigSeen, usePastMonths, usePlan, useProfile, useWallets } from '../../lib/data'
+import { FundSheet } from '../funds/FundSheets'
 import { formatVnd } from '../../lib/format'
 import { monthTitle } from '../../lib/period'
 import { useVnDays } from '../../lib/useVnDays'
@@ -22,7 +23,10 @@ import { PlanWizard } from './PlanWizard'
  */
 export function PlanScreen(props: { openRecap?: 'prev'; openWizard?: boolean; onWizardOpened?: () => void; onOpenSettings?: () => void }) {
   const { today } = useVnDays()
-  const { month, ready, plan, result } = usePlan(today)
+  const { month, ready, plan, result, actual } = usePlan(today)
+  const wallets = useWallets()
+  const piggy = fundsOf(wallets.data).find((f) => f.isSavings && f.accountSuffix)
+  const [saving, setSaving] = useState(false)
   const past = usePastMonths(month)
   const [setting, setSetting] = useState(!!props.openWizard)
   const { onWizardOpened, openWizard } = props
@@ -108,6 +112,17 @@ export function PlanScreen(props: { openRecap?: 'prev'; openWizard?: boolean; on
           >
             {lastDay ? 'Tổng kết tháng' : `Tổng kết tháng · mở ngày ${monthDays(month).length}/${Number(month.slice(5, 7))}`}
           </Button>
+          {/* V16 · Cuối tháng: phần dư cất vào tiết kiệm trước, còn lại tự thành "Dư tháng trước" của tháng sau */}
+          {lastDay && actual && actual.canSpend > 0 && piggy && (
+            <div className="mt-3 rounded-2xl bg-white/15 p-3">
+              <p className="text-sm font-semibold">
+                Hết tháng rồi, đang dư <b className="num">{formatVnd(actual.canSpend)}</b>. Cất bớt vào tiết kiệm đi, phần còn lại tui chuyển thành dư tháng sau.
+              </p>
+              <Button className="mt-2 border-brand-200 bg-white text-brand-600" size="sm" full caps={false} onClick={() => setSaving(true)}>
+                Bỏ vào tiết kiệm
+              </Button>
+            </div>
+          )}
         </motion.section>
       )}
 
@@ -140,6 +155,7 @@ export function PlanScreen(props: { openRecap?: 'prev'; openWizard?: boolean; on
       </Sheet>
       <PlanWizard open={setting} month={month} today={today} onClose={() => setSetting(false)} />
       <RecapStory month={recapMonth} onClose={() => setRecapMonth(null)} />
+      <FundSheet fund={saving && piggy ? piggy : null} mode="deposit" onClose={() => setSaving(false)} />
       <ConfigNudge
         open={nudging}
         onSettings={() => {
