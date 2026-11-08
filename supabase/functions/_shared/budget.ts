@@ -109,6 +109,8 @@ export type PlanInput = {
    * không tính lại theo kiểu ngày hiện tại — đổi kế hoạch tương lai không làm ngày cũ bị "vượt mức" oan.
    */
   frozen?: Record<string, number>
+  /** V16-11 · id các khoản cố định người dùng đã tick xong trong tháng */
+  closedFixed?: string[]
   /** V16 · "Dư tháng trước": số dư VCB + tiền mặt lúc bắt đầu kế hoạch, cộng vào tiền linh hoạt */
   opening?: number
   /** V16 · Hạn mức theo dòng tiền: không cho tiêu quá số tiền thật đang có trước mỗi đợt tiền về */
@@ -132,9 +134,11 @@ export type CashLimit = { until: string | null; planLimit: number; available: nu
 /** before = ngày trước khi lập kế hoạch (chưa dùng Titan): không có hạn mức, không tính chi tiêu */
 export type DayPlan = { date: string; kind: DayKind; planned: number; spent: number; past: boolean; isToday: boolean; before?: boolean }
 
-export type FixedStatus = FixedItem & { paid: number; done: boolean }
+/** paid = đã chi (cộng mọi giao dịch đúng danh mục), done = người dùng đã tick xong, cost = số tính vào kế hoạch */
+export type FixedStatus = FixedItem & { paid: number; done: boolean; cost: number }
 
 export type PlanResult = {
+  /** tổng tính vào kế hoạch (khoản đã xong theo số thật, chưa xong theo số lớn hơn giữa dự kiến và đã chi) */
   fixedTotal: number
   fixedPaid: number
   fixedItems: FixedStatus[]
@@ -185,17 +189,20 @@ export function computePlan(input: PlanInput): PlanResult {
     const key = s.categoryId && fixedCats.has(s.categoryId) ? s.categoryId : s.parentId!
     spentByFixedCat.set(key, (spentByFixedCat.get(key) ?? 0) + s.amount)
   }
-  // Nhiều khoản cùng danh mục: chia tiền đã chi lần lượt theo thứ tự ngày đến hạn
+  // Nhiều khoản cùng danh mục: chia tiền đã chi lần lượt theo thứ tự ngày đến hạn; khoản cuối của danh mục nhận phần lố
   const remainingByCat = new Map(spentByFixedCat)
-  const fixedItems: FixedStatus[] = [...input.fixed]
-    .sort((a, b) => (a.dueDay ?? 99) - (b.dueDay ?? 99))
-    .map((f) => {
-      const pool = f.categoryId ? (remainingByCat.get(f.categoryId) ?? 0) : 0
-      const paid = Math.min(pool, f.amount)
-      if (f.categoryId) remainingByCat.set(f.categoryId, pool - paid)
-      return { ...f, paid, done: paid >= f.amount * 0.9 }
-    })
-  const fixedTotal = input.fixed.reduce((s, f) => s + f.amount, 0)
+  const sorted = [...input.fixed].sort((a, b) => (a.dueDay ?? 99) - (b.dueDay ?? 99))
+  const lastOfCat = new Map(sorted.filter((f) => f.categoryId).map((f) => [f.categoryId!, f.id]))
+  const closed = new Set(input.closedFixed ?? [])
+  const fixedItems: FixedStatus[] = sorted.map((f) => {
+    const pool = f.categoryId ? (remainingByCat.get(f.categoryId) ?? 0) : 0
+    const paid = f.categoryId && lastOfCat.get(f.categoryId) === f.id ? pool : Math.min(pool, f.amount)
+    if (f.categoryId) remainingByCat.set(f.categoryId, pool - paid)
+    const done = closed.has(f.id)
+    // V16-11: đã tick xong → tốn bao nhiêu tính bấy nhiêu; chưa tick → giữ chỗ bằng số lớn hơn giữa dự kiến và đã chi
+    return { ...f, paid, done, cost: done ? paid : Math.max(f.amount, paid) }
+  })
+  const fixedTotal = fixedItems.reduce((s, f) => s + f.cost, 0)
   const fixedPaid = fixedItems.reduce((s, f) => s + f.paid, 0)
 
   const flexibleBudget = input.income + (input.opening ?? 0) - fixedTotal - input.savings
@@ -314,7 +321,7 @@ function cashCap(
     .filter((x) => x.amount > 0)
     .map((x) => ({ day: !x.day || x.day > last ? END : x.day <= today ? tomorrow : x.day, amount: x.amount }))
   const unpaid = fixed
-    .filter((f) => f.amount > f.paid)
+    .filter((f) => !f.done && f.amount > f.paid)
     .map((f) => ({ day: f.dueDay ? `${today.slice(0, 8)}${String(Math.min(f.dueDay, days.length)).padStart(2, '0')}` : last, amount: f.amount - f.paid }))
   const marks = [...new Set(incomes.map((x) => x.day).filter((d) => d !== END)), END].sort()
   const wToday = weightOf(kindOf(today))

@@ -60,7 +60,7 @@ const TITLE: Record<Step, string> = {
 }
 
 // V16: nguồn thu có ngày dự kiến nhận + danh mục thu (để tự tick khi tiền về)
-type Source = { key: number; name: string; amount: number | null; day: number | null; categoryId: string | null }
+type Source = { key: number; name: string; amount: number | null; day: number | null; categoryId: string | null; done?: boolean }
 let sourceKey = 0
 const src = (name: string, amount: number | null, day: number | null = null, categoryId: string | null = null): Source => ({
   key: ++sourceKey,
@@ -120,7 +120,7 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
     if (!plan.isSuccess || !lastIncome.isSuccess || !categories.isSuccess) return null
     const catOf = (name: string) => incomeCats.find((c) => c.name.toLowerCase() === name.toLowerCase())?.id ?? null
     const p = plan.data
-    if (p?.incomeSources.length) return p.incomeSources.map((x) => src(x.name, x.amount, x.day, x.categoryId ?? catOf(x.name)))
+    if (p?.incomeSources.length) return p.incomeSources.map((x) => ({ ...src(x.name, x.amount, x.day, x.categoryId ?? catOf(x.name)), done: x.done }))
     if (p && p.income > 0) return [src('Thu nhập', p.income)]
     if (lastIncome.data.length) return lastIncome.data.map((x) => src(x.name, x.amount, null, catOf(x.name)))
     return [src('Gia đình gửi', null, null, catOf('Gia đình gửi')), src('Lương', null, null, catOf('Lương'))]
@@ -202,7 +202,7 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
     try {
       const clean = (sources ?? [])
         .filter((s) => (s.amount ?? 0) > 0)
-        .map((s) => ({ name: s.name.trim() || 'Thu nhập', amount: s.amount ?? 0, day: s.day, category_id: s.categoryId }))
+        .map((s) => ({ name: s.name.trim() || 'Thu nhập', amount: s.amount ?? 0, day: s.day, category_id: s.categoryId, ...(s.done ? { done: true } : {}) }))
       // Tháng mới: loại ngày lấy theo Cấu hình, chưa cấu hình thì theo tháng gần nhất (V13-4)
       let dayKinds: unknown = undefined
       if (!editing) {

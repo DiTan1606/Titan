@@ -61,17 +61,16 @@ describe('matchIncomes – nguồn thu tự tick', () => {
     { name: 'Ba mẹ gửi', amount: 1_000_000, day: 1, categoryId: 'family' },
     { name: 'Lương', amount: 2_000_000, day: 20, categoryId: 'salary' },
   ]
-  it('tiền thu đúng danh mục thì tick, dư thì thành thu ngoài dự kiến', () => {
+  it('cộng dồn nhiều lần chuyển; vượt dự kiến thì nguồn cuối nhận phần vượt; không khớp nguồn nào là ngoài dự kiến', () => {
     const r = matchIncomes(sources, [
-      flow({ type: 'income', amount: 1_000_000, categoryId: 'family' }),
+      flow({ type: 'income', amount: 400_000, categoryId: 'family' }),
+      flow({ type: 'income', amount: 600_000, categoryId: 'family' }),
       flow({ type: 'income', amount: 2_300_000, categoryId: 'salary' }),
       flow({ type: 'income', amount: 800_000, categoryId: 'bonus' }),
     ])
-    expect(r.sources.map((s) => [s.received, s.done])).toEqual([
-      [1_000_000, true],
-      [2_000_000, true],
-    ])
-    expect(r.unexpected).toBe(300_000 + 800_000)
+    expect(r.sources.map((s) => s.received)).toEqual([1_000_000, 2_300_000])
+    expect(r.sources.every((s) => !s.done)).toBe(true) // tick do người dùng bấm
+    expect(r.unexpected).toBe(800_000)
   })
   it('danh mục chi tiết của danh mục nguồn cũng tính; điều chỉnh số dư thì không', () => {
     const r = matchIncomes(sources, [
@@ -79,7 +78,6 @@ describe('matchIncomes – nguồn thu tự tick', () => {
       flow({ type: 'income', amount: 500_000, source: 'reconcile' }),
     ])
     expect(r.sources[0].received).toBe(400_000)
-    expect(r.sources[0].done).toBe(false)
     expect(r.unexpected).toBe(0)
   })
 })
@@ -116,6 +114,9 @@ describe('monthPlan – hạn mức theo dòng tiền', () => {
     // lương coi như về ngày mai (22): tới đó chỉ có 150k − 100k đệm = 50k cho hôm nay (Claude hạn 22, chưa tính)
     expect(result.todayLimit).toBe(50_000)
     expect(result.cashLimit?.until).toBe('2026-11-22')
+    const { actual } = monthPlan({ ...base, plan: late, fixed: [fixed[1]], today: '2026-11-21', balance: 150_000 })
+    expect(actual.incomeLate).toBe(true)
+    expect(actual.canSpendUntil).toBe('2026-11-22')
   })
 
   it('bảng thực tế cân với số dư', () => {
@@ -137,7 +138,7 @@ describe('monthPlan – hạn mức theo dòng tiền', () => {
     expect(actual.other).toBe(0)
     expect(actual.canSpend).toBe(balance - 100_000 - 590_000) // hết đợt tiền về: trừ đệm + Claude chưa trả, tiết kiệm đã đủ
     expect(actual.canSpendUntil).toBeNull()
-    expect(actual.sources[0].done).toBe(true)
+    expect(actual.sources[0].received).toBe(2_000_000)
   })
 
   it('chi tiêu trước ngày lập không bị trừ vào kế hoạch', () => {
@@ -145,5 +146,57 @@ describe('monthPlan – hạn mức theo dòng tiền', () => {
     const { result } = monthPlan({ ...base, flows, balance: 5_000_000 })
     expect(result.flexibleSpent).toBe(0)
     expect(result.days.find((d) => d.date === '2026-11-03')).toMatchObject({ before: true, planned: 0, spent: 0 })
+  })
+})
+
+describe('monthPlan – tiến độ, tick tay, tiền dư (V16-11…13)', () => {
+  const fam = { name: 'Ba mẹ gửi', amount: 7_000_000, day: 5, categoryId: 'family' }
+  const p0: MonthPlanRow = { ...plan, createdDay: '2026-11-01', carryOver: false, income: 7_000_000, savings: 0, sources: [fam] }
+  const at = { ...base, today: '2026-11-10', plan: p0, fixed: [], balance: 9_000_000 }
+
+  it('ba mẹ chỉ gửi 4tr/7tr: chưa tick thì vẫn chờ, tick xong thì tiền linh hoạt giảm 3tr', () => {
+    const flows = [flow({ date: '2026-11-05', type: 'income', amount: 4_000_000, categoryId: 'family' })]
+    const waiting = monthPlan({ ...at, flows }).actual
+    const closed = monthPlan({ ...at, flows, plan: { ...p0, sources: [{ ...fam, done: true }] } }).actual
+    expect(waiting.flexibleNow).toBe(7_000_000)
+    expect(closed.flexibleNow).toBe(4_000_000)
+    expect(closed.changes.income).toBe(-3_000_000)
+    expect(closed.expected.flexible).toBe(7_000_000) // dự kiến giữ nguyên
+  })
+
+  it('ba mẹ gửi 2 lần đủ 7tr; thưởng 800k ngoài dự kiến là tiền dư chưa phân bổ', () => {
+    const flows = [
+      flow({ date: '2026-11-05', type: 'income', amount: 3_000_000, categoryId: 'family' }),
+      flow({ date: '2026-11-06', type: 'income', amount: 4_000_000, categoryId: 'family' }),
+      flow({ date: '2026-11-08', type: 'income', amount: 800_000, categoryId: 'bonus' }),
+    ]
+    const a = monthPlan({ ...at, flows }).actual
+    expect(a.sources[0].received).toBe(7_000_000)
+    expect(a.extra).toBe(800_000)
+    expect(a.unallocated).toBe(800_000)
+    expect(a.extraToAsk).toBe(800_000)
+    expect(a.flexibleNow).toBe(7_000_000) // tiền dư không tự vào tiêu
+  })
+
+  it('tiền dư: đưa vào tiêu / cất tiết kiệm / để dành tháng sau', () => {
+    const flows = [flow({ date: '2026-11-08', type: 'income', amount: 800_000, categoryId: 'bonus' })]
+    const spend = monthPlan({ ...at, flows, plan: { ...p0, extraToFlex: 300_000 } }).actual
+    expect(spend.flexibleNow).toBe(7_300_000)
+    expect(spend.unallocated).toBe(500_000)
+    const saved = monthPlan({ ...at, flows: [...flows, flow({ date: '2026-11-09', type: 'transfer', amount: 500_000, to: 'fund' })] }).actual
+    expect(saved.unallocated).toBe(300_000)
+    const kept = monthPlan({ ...at, flows, plan: { ...p0, extraKept: 800_000 } }).actual
+    expect(kept.unallocated).toBe(800_000)
+    expect(kept.extraToAsk).toBe(0)
+  })
+
+  it('khoản cố định đã tick không còn bị tính là chưa trả', () => {
+    const fx = [{ id: 'anni', name: 'Kỷ niệm', amount: 1_500_000, dueDay: 15, categoryId: 'social' }]
+    const flows = [flow({ date: '2026-11-10', type: 'expense', amount: 1_200_000, categoryId: 'social' })]
+    const noIncome = { ...p0, sources: [] } // không chờ tiền về → tính tới cuối tháng
+    const open = monthPlan({ ...at, fixed: fx, flows, balance: 7_800_000, plan: noIncome }).actual
+    const done = monthPlan({ ...at, fixed: fx, flows, balance: 7_800_000, plan: { ...noIncome, closedFixed: ['anni'] } }).actual
+    expect(done.canSpend - open.canSpend).toBe(300_000)
+    expect(done.changes.fixed).toBe(300_000)
   })
 })

@@ -408,7 +408,7 @@ export function useMonthPlan(month: string) {
       const row = throwIf(
         await supabase
           .from('month_plans')
-          .select('income, savings, created_at, day_kinds, income_sources, carry_over')
+          .select('income, savings, created_at, day_kinds, income_sources, carry_over, closed_fixed, extra_to_flex, extra_kept')
           .eq('month', month)
           .maybeSingle(),
       ) as {
@@ -418,6 +418,9 @@ export function useMonthPlan(month: string) {
         day_kinds: unknown
         income_sources: unknown
         carry_over: boolean
+        closed_fixed: string[] | null
+        extra_to_flex: number | null
+        extra_kept: number | null
       } | null
       return row
         ? {
@@ -428,6 +431,9 @@ export function useMonthPlan(month: string) {
             kinds: dayKindsConfig(row.day_kinds),
             incomeSources: toSources(row.income_sources) as IncomeSource[],
             carryOver: !!row.carry_over,
+            closedFixed: row.closed_fixed ?? [],
+            extraToFlex: Number(row.extra_to_flex ?? 0),
+            extraKept: Number(row.extra_kept ?? 0),
           }
         : null
     },
@@ -446,6 +452,20 @@ export function useMonthFlows(month: string) {
       return ((rows ?? []) as unknown as Parameters<typeof toFlow>[0][]).map((r) => toFlow(r, vnDate))
     },
   })
+}
+
+/** V16-11/12/13 · Ghi tick / tiền dư của kế hoạch tháng (đọc bản mới nhất rồi sửa, tránh ghi đè nhau) */
+export async function updateMonthPlan(month: string, edit: (row: { closed_fixed: string[]; income_sources: unknown[]; extra_to_flex: number; extra_kept: number }) => Record<string, unknown>) {
+  const row = throwIf(
+    await supabase.from('month_plans').select('closed_fixed, income_sources, extra_to_flex, extra_kept').eq('month', month).single(),
+  ) as { closed_fixed: string[] | null; income_sources: unknown[] | null; extra_to_flex: number; extra_kept: number }
+  const patch = edit({
+    closed_fixed: row.closed_fixed ?? [],
+    income_sources: row.income_sources ?? [],
+    extra_to_flex: Number(row.extra_to_flex),
+    extra_kept: Number(row.extra_kept),
+  })
+  throwIf(await supabase.from('month_plans').update(patch).eq('month', month))
 }
 
 /** Số dư VCB + tiền mặt lúc này */
@@ -557,6 +577,9 @@ export function usePlan(today: string) {
             sources: plan.data.incomeSources,
             createdDay: plan.data.createdDay,
             weights: weightsOf(plan.data.kinds),
+            closedFixed: plan.data.closedFixed,
+            extraToFlex: plan.data.extraToFlex,
+            extraKept: plan.data.extraKept,
           },
           fixed: recurring.data.filter((r) => r.active),
           dayKinds: days.data,

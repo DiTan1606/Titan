@@ -62,7 +62,7 @@ export function dueReminder(input: { today: string; items: FixedStatus[]; remind
   const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate()
   const lines: string[] = []
   for (const it of input.items) {
-    if (it.dueDay === null || it.done) continue
+    if (it.dueDay === null || it.done || it.paid >= it.amount) continue // đã tick xong hoặc đã chi đủ thì khỏi nhắc
     const due = Math.min(it.dueDay, lastDay)
     const until = due - d
     if (until === input.remindDays && until > 0) lines.push(`${it.name} ${formatVnd(it.amount)} còn ${until} ngày`)

@@ -45,7 +45,30 @@ describe('computePlan – túi cố định và tiền linh hoạt', () => {
     })
     expect(p.todaySpent).toBe(50_000)
     expect(p.fixedPaid).toBe(4_635_556)
-    expect(p.fixedItems.every((f) => f.done)).toBe(true)
+    // V16-11: chi đủ nhưng chưa tick thì chưa "xong" (tick do người dùng bấm)
+    expect(p.fixedItems.every((f) => !f.done && f.paid >= f.amount)).toBe(true)
+  })
+
+  it('V16-11 · khoản cố định chi nhiều lần, tick xong khi chi ít hơn → phần dư về tiền linh hoạt', () => {
+    const spends = [
+      { date: '2026-11-01', amount: 700_000, categoryId: 'home', parentId: null },
+      { date: '2026-11-01', amount: 500_000, categoryId: 'home', parentId: null },
+    ]
+    const fixed = [{ id: 'anni', name: 'Kỷ niệm', amount: 1_500_000, dueDay: 15, categoryId: 'home' }]
+    const open = computePlan({ ...base, fixed, spends })
+    expect(open.fixedItems[0]).toMatchObject({ paid: 1_200_000, done: false, cost: 1_500_000 })
+    const closed = computePlan({ ...base, fixed, spends, closedFixed: ['anni'] })
+    expect(closed.fixedItems[0]).toMatchObject({ paid: 1_200_000, done: true, cost: 1_200_000 })
+    expect(closed.flexibleBudget - open.flexibleBudget).toBe(300_000)
+  })
+
+  it('V16-11 · khoản cố định tốn hơn dự kiến (Claude 600k/590k) → phần lố trừ vào tiền linh hoạt, kể cả chưa tick', () => {
+    const fixed = [{ id: 'claude', name: 'Claude', amount: 590_000, dueDay: 22, categoryId: 'ai' }]
+    const none = computePlan({ ...base, fixed })
+    const over = computePlan({ ...base, fixed, spends: [{ date: '2026-11-01', amount: 600_000, categoryId: 'ai', parentId: null }] })
+    expect(over.fixedItems[0]).toMatchObject({ paid: 600_000, cost: 600_000 })
+    expect(none.flexibleBudget - over.flexibleBudget).toBe(10_000)
+    expect(over.todaySpent).toBe(0) // vẫn không tính vào hạn mức ngày
   })
 })
 

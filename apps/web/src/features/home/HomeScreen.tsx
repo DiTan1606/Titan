@@ -93,7 +93,7 @@ export function HomeScreen(props: { onOpenPlan: () => void; onOpenNotifications:
             <DayKindMenu today={today} month={month} current={todayKind} kinds={kinds} />
           </div>
           <DailyBar spent={plan.todaySpent} limit={plan.todayLimit} />
-          {plan.cashLimit && <CashLimitNote limit={plan.cashLimit} sources={actual?.sources ?? []} compact />}
+          {plan.cashLimit && <CashLimitNote limit={plan.cashLimit} sources={actual?.sources ?? []} late={actual?.incomeLate} compact />}
         </motion.section>
       ) : (
         <motion.section {...rise(1)} className="shrink-0 rounded-[1.75rem] border-b-[6px] border-brand-600 bg-brand-400 px-5 pt-4 pb-4 text-white">

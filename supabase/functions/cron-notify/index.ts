@@ -94,7 +94,7 @@ async function loadPlanContext(db: SupabaseClient, userId: string, today: string
   const [plan, recurring, days, flowRows, pending, budgets, limits, balances, profile] = await Promise.all([
     db
       .from('month_plans')
-      .select('income, savings, created_at, day_kinds, income_sources, carry_over')
+      .select('income, savings, created_at, day_kinds, income_sources, carry_over, closed_fixed, extra_to_flex, extra_kept')
       .eq('user_id', userId)
       .eq('month', month)
       .maybeSingle(),
@@ -132,6 +132,9 @@ async function loadPlanContext(db: SupabaseClient, userId: string, today: string
           sources: toSources(plan.data.income_sources),
           createdDay: vnDate(new Date(plan.data.created_at)),
           weights: weightsOf(dayKindsConfig(plan.data.day_kinds)),
+          closedFixed: (plan.data.closed_fixed ?? []) as string[],
+          extraToFlex: Number(plan.data.extra_to_flex ?? 0),
+          extraKept: Number(plan.data.extra_kept ?? 0),
         },
         fixed: (recurring.data ?? []).map((r) => ({
           id: r.id,

@@ -1,9 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { Check, Clapperboard, Lock } from 'lucide-react'
+import { Clapperboard, Lock } from 'lucide-react'
 import { motion } from 'motion/react'
 import { createElement, useState } from 'react'
 import { type DayKind, type DayKindsConfig, type DayPlan, kindDef, monthDays, spentByParent } from '@shared/budget.ts'
-import { useSavingsProgress, useCategories, useCategoryBudgets, usePlan, useRecurringItems } from '../../lib/data'
+import { updateMonthPlan, useSavingsProgress, useCategories, useCategoryBudgets, usePlan, useRecurringItems } from '../../lib/data'
 import { formatVnd } from '../../lib/format'
 import { useVnDays } from '../../lib/useVnDays'
 import { AnimatedVnd } from '../../ui/AnimatedNumber'
@@ -19,7 +19,7 @@ import { DayKindMenu } from '../home/DayKindMenu'
 import { RecapStory } from '../recap/RecapStory'
 import { PlanWizard } from './PlanWizard'
 import { CashLimitNote } from './CashLimitNote'
-import { IncomeCard, MonthCard } from './MonthCards'
+import { ExtraCard, IncomeCard, MonthCard, Progress as Bar, Tick } from './MonthCards'
 
 /** V11 · Chi tiết kế hoạch tháng này (V14: mở từ thẻ "Xem kế hoạch tháng này" ở tab Kế hoạch) */
 export function MonthPlanDetail() {
@@ -54,6 +54,18 @@ export function MonthPlanDetail() {
     }
   }
 
+  // V16-11 · Tick "Xong" một khoản cố định trong tháng này (bấm lại để bỏ tick)
+  async function toggleFixed(id: string) {
+    try {
+      await updateMonthPlan(month, (row) => ({
+        closed_fixed: row.closed_fixed.includes(id) ? row.closed_fixed.filter((x) => x !== id) : [...row.closed_fixed, id],
+      }))
+      await qc.invalidateQueries({ queryKey: ['plan'] })
+    } catch (e) {
+      toast((e as Error).message, { tone: 'error' })
+    }
+  }
+
   const byParent = spentByParent(spends)
   const budgetRows = cats
     .filter((c) => c.kind === 'expense' && !c.parentId && c.systemKey !== 'unknown')
@@ -77,7 +89,7 @@ export function MonthPlanDetail() {
               <DayKindMenu today={today} month={month} current={dayKinds[today] ?? 'normal'} kinds={kinds} />
             </div>
             <DailyBar spent={result.todaySpent} limit={result.todayLimit} />
-            {result.cashLimit && <CashLimitNote limit={result.cashLimit} sources={actual?.sources ?? []} />}
+            {result.cashLimit && <CashLimitNote limit={result.cashLimit} sources={actual?.sources ?? []} late={actual?.incomeLate} />}
             {result.surplus !== 0 && (
               <span className="mt-3 inline-flex rounded-xl bg-white/20 px-3 py-1 text-sm font-bold">
                 Hũ dư {result.surplus > 0 ? '+' : '−'}
@@ -98,7 +110,8 @@ export function MonthPlanDetail() {
           <KindPicker day={pickDay?.date ?? null} current={pickDay?.kind ?? 'normal'} kinds={kinds} onPick={pickKind} onClose={() => setPickDay(null)} />
 
           {actual && <MonthCard month={month} result={result} actual={actual} onEdit={() => setEditingPlan(true)} />}
-          {actual && <IncomeCard actual={actual} today={today} categories={cats} />}
+          {actual && <ExtraCard month={month} actual={actual} />}
+          {actual && <IncomeCard month={month} actual={actual} today={today} categories={cats} />}
         </>
       )}
 
@@ -112,15 +125,18 @@ export function MonthPlanDetail() {
         {recurring.data?.length === 0 && (
           <p className="mt-3 rounded-2xl bg-ink-50 p-3 text-sm text-ink-500">Chưa có khoản nào. Bấm Sửa ở thẻ tháng để thêm tiền trọ, 4G, gói AI…</p>
         )}
-        <ul className="mt-2">
+        <ul className="mt-1">
           {recurring.data?.map((r) => {
             const status = result?.fixedItems.find((f) => f.id === r.id)
             const day = Number(today.slice(8, 10))
-            const dueSoon = r.active && r.dueDay !== null && !status?.done && r.dueDay - day >= 0 && r.dueDay - day <= 3
-            const overdue = r.active && r.dueDay !== null && !status?.done && r.dueDay < day
+            const paid = status?.paid ?? 0
+            const open = r.active && !status?.done && paid < r.amount
+            const dueSoon = open && r.dueDay !== null && r.dueDay - day >= 0 && r.dueDay - day <= 3
+            const overdue = open && r.dueDay !== null && r.dueDay < day
+            const catName = cats.find((c) => c.id === r.categoryId)?.name ?? 'danh mục của khoản'
             return (
-              <li key={r.id}>
-                <div className={`flex w-full items-center gap-3 px-1 py-2.5 ${r.active ? '' : 'opacity-50'}`}>
+              <li key={r.id} className={`py-2.5 ${r.active ? '' : 'opacity-50'}`}>
+                <div className="flex items-center gap-3 px-1">
                   <CategoryIcon category={cats.find((c) => c.id === r.categoryId)} categories={cats} size={40} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-bold">{r.name}</span>
@@ -128,25 +144,31 @@ export function MonthPlanDetail() {
                       {!r.active
                         ? 'Đang tắt'
                         : status?.done
-                          ? 'Đã trả tháng này'
-                          : overdue
-                            ? `Quá hạn ngày ${r.dueDay} · trả rồi thì ghi chi vào ${cats.find((c) => c.id === r.categoryId)?.name ?? 'danh mục của khoản'}`
-                            : r.dueDay
-                            ? dueSoon
-                              ? r.dueDay === day
-                                ? 'Đến hạn hôm nay'
-                                : `Còn ${r.dueDay - day} ngày đến hạn`
-                              : `Ngày ${r.dueDay} hằng tháng`
-                            : 'Chưa đặt ngày đến hạn'}
+                          ? paid < r.amount
+                            ? `Xong, tốn ít hơn ${formatVnd(r.amount - paid)}, dồn vào tiền linh hoạt`
+                            : paid > r.amount
+                              ? `Xong, tốn hơn dự kiến ${formatVnd(paid - r.amount)}`
+                              : 'Xong'
+                          : paid > r.amount
+                            ? `Lố ${formatVnd(paid - r.amount)}, trừ vào tiền linh hoạt`
+                            : paid >= r.amount
+                              ? 'Đã chi đủ, bấm tick để chốt'
+                              : paid > 0
+                                ? `Còn ${formatVnd(r.amount - paid)}, chi xong thì bấm tick`
+                                : overdue
+                                  ? `Quá hạn ngày ${r.dueDay} · trả rồi thì ghi chi vào ${catName}`
+                                  : r.dueDay
+                                    ? dueSoon
+                                      ? r.dueDay === day
+                                        ? 'Đến hạn hôm nay'
+                                        : `Còn ${r.dueDay - day} ngày đến hạn`
+                                      : `Ngày ${r.dueDay} hằng tháng`
+                                    : 'Chưa đặt ngày đến hạn'}
                     </span>
                   </span>
-                  <span className="num font-bold">{formatVnd(r.amount)}</span>
-                  {status?.done && (
-                    <span className="grid size-6 place-items-center rounded-full bg-brand-400 text-white">
-                      <Check size={14} strokeWidth={3} />
-                    </span>
-                  )}
+                  {r.active && plan && <Tick done={!!status?.done} label={`Xong ${r.name}`} onClick={() => toggleFixed(r.id)} />}
                 </div>
+                {r.active && <Bar value={paid} max={r.amount} />}
               </li>
             )
           })}

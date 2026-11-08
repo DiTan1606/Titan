@@ -53,7 +53,7 @@ export function SettingsScreen(props: { onOpenNotifications: () => void }) {
               Quyền riêng tư
             </a>
           </div>
-          <span className="rounded-xl bg-brand-50 px-3 py-1 text-sm font-extrabold text-brand-600">Titan 1.6.0</span>
+          <span className="rounded-xl bg-brand-50 px-3 py-1 text-sm font-extrabold text-brand-600">Titan 1.6.1</span>
         </section>
       </Group>
     </div>
