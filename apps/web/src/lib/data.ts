@@ -31,7 +31,16 @@ export type Category = {
   kind: 'expense' | 'income'
   parentId: string | null
   systemKey: string | null
+  /** V15 · màu người dùng chọn (hex), null = mặc định theo nhóm */
+  color: string | null
+  /** V15 · đang ẩn (chính nó hoặc danh mục cha bị ẩn): không hiện để chọn, giao dịch cũ vẫn hiện tên */
+  hidden: boolean
+  /** V15 · chính nó bị ẩn (để liệt kê trong "Đã ẩn") */
+  hiddenSelf: boolean
 }
+
+/** Danh mục còn chọn được (bỏ danh mục đang ẩn) */
+export const activeCategories = (cats: Category[]) => cats.filter((c) => !c.hidden)
 
 export type TxnType = 'expense' | 'income' | 'transfer' | 'borrow' | 'lend' | 'repay' | 'collect'
 
@@ -111,23 +120,42 @@ export function useCategories() {
   return useQuery({
     queryKey: ['categories'],
     staleTime: 5 * 60_000,
-    queryFn: async (): Promise<Category[]> =>
-      (
+    // V15: lấy cả danh mục đang ẩn để giao dịch cũ vẫn hiện đúng tên; chỗ chọn danh mục lọc bằng activeCategories
+    queryFn: async (): Promise<Category[]> => {
+      const rows =
         throwIf(
           await supabase
             .from('categories')
-            .select('id, name, icon, kind, parent_id, system_key, sort_order')
-            .is('hidden_at', null)
-            .order('sort_order'),
+            .select('id, name, icon, color, kind, parent_id, system_key, sort_order, hidden_at')
+            .order('sort_order')
+            .order('created_at'),
         ) ?? []
-      ).map((c) => ({
+      const hiddenIds = new Set(rows.filter((c) => c.hidden_at).map((c) => c.id as string))
+      return rows.map((c) => ({
         id: c.id,
         name: c.name,
         icon: c.icon,
+        color: c.color,
         kind: c.kind,
         parentId: c.parent_id,
         systemKey: c.system_key,
-      })),
+        hiddenSelf: !!c.hidden_at,
+        hidden: !!c.hidden_at || (!!c.parent_id && hiddenIds.has(c.parent_id)),
+      }))
+    },
+  })
+}
+
+/** V15 · Mỗi danh mục đang dùng ở bao nhiêu giao dịch / ngân sách / khoản cố định */
+export type CategoryUsage = { txns: number; budgets: number; recurring: number }
+export function useCategoryUsage(enabled = true) {
+  return useQuery({
+    queryKey: ['categories', 'usage'],
+    enabled,
+    queryFn: async (): Promise<Record<string, CategoryUsage>> => {
+      const rows = throwIf(await supabase.rpc('category_usage')) as { category_id: string; txns: number; budgets: number; recurring: number }[] | null
+      return Object.fromEntries((rows ?? []).map((r) => [r.category_id, { txns: Number(r.txns), budgets: Number(r.budgets), recurring: Number(r.recurring) }]))
+    },
   })
 }
 
@@ -513,7 +541,11 @@ export function usePlan(today: string) {
 export async function ensureSubcategory(parent: Category, name: string, existing: Category[]): Promise<string> {
   const clean = name.trim()
   const found = existing.find((c) => c.parentId === parent.id && c.name.toLowerCase() === clean.toLowerCase())
-  if (found) return found.id
+  if (found) {
+    // gõ lại đúng tên một danh mục chi tiết đang ẩn → mở lại luôn
+    if (found.hiddenSelf) await supabase.from('categories').update({ hidden_at: null }).eq('id', found.id)
+    return found.id
+  }
   const { data, error } = await supabase
     .from('categories')
     .insert({ kind: parent.kind, name: clean, parent_id: parent.id })
@@ -675,6 +707,16 @@ export function useCashBills(wallet: Wallet | undefined) {
 }
 
 /** Lưu một phần profiles.settings, cập nhật cache ngay (bấm liên tiếp không ghi đè nhau) */
+/** V15 · Đánh dấu đã mở cấu hình chi tiêu (danh mục / loại ngày) để khỏi nhắc trước khi lập kế hoạch */
+export function useMarkConfigSeen() {
+  const qc = useQueryClient()
+  const save = useSaveSettings()
+  return () => {
+    const p = qc.getQueryData<{ settings: Record<string, unknown> }>(['profile'])
+    if (p && p.settings?.config_seen !== true) save({ config_seen: true }).catch(() => {})
+  }
+}
+
 export function useSaveSettings() {
   const qc = useQueryClient()
   type P = { id: string; settings: Record<string, unknown> }

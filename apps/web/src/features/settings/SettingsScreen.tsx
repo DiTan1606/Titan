@@ -34,8 +34,10 @@ export function SettingsScreen(props: { onOpenNotifications: () => void }) {
       </Group>
 
       <Group title="Chi tiêu">
-        <DayKindsCard />
-        <CategoriesCard />
+        <div data-tour="settings-spending" className="flex flex-col gap-2">
+          <DayKindsCard />
+          <CategoriesCard />
+        </div>
         <TrashCard />
       </Group>
 
@@ -48,7 +50,7 @@ export function SettingsScreen(props: { onOpenNotifications: () => void }) {
               Quyền riêng tư
             </a>
           </div>
-          <span className="rounded-xl bg-brand-50 px-3 py-1 text-sm font-extrabold text-brand-600">Titan 1.4.1</span>
+          <span className="rounded-xl bg-brand-50 px-3 py-1 text-sm font-extrabold text-brand-600">Titan 1.5.0</span>
         </section>
       </Group>
     </div>

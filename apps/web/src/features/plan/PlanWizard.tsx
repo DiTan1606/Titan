@@ -139,7 +139,7 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
   const unit = preview.todayLimit / kindDef(kinds, kindOf(today)).weight
 
   const lastByParent = useMemo(() => spentByParent(lastSpends.data ?? []), [lastSpends.data])
-  const budgetCats = cats.filter((c) => c.kind === 'expense' && !c.parentId && c.systemKey !== 'unknown')
+  const budgetCats = cats.filter((c) => c.kind === 'expense' && !c.parentId && c.systemKey !== 'unknown' && !c.hidden)
 
   const valid: Record<Step, boolean> = {
     income: income > 0 && (sources ?? []).every((s) => s.amount === null || s.name.trim().length > 0),

@@ -31,8 +31,9 @@ export function CategoryPicker(props: {
     setDetail(child?.name ?? '')
   }
 
-  const parents = props.categories.filter((c) => c.kind === props.kind && !c.parentId && c.systemKey !== 'unknown')
-  const children = parent ? props.categories.filter((c) => c.parentId === parent.id) : []
+  // Danh mục đang ẩn không hiện để chọn (trừ khi giao dịch đang mang sẵn nó)
+  const parents = props.categories.filter((c) => c.kind === props.kind && !c.parentId && c.systemKey !== 'unknown' && (!c.hidden || c.id === parent?.id))
+  const children = parent ? props.categories.filter((c) => c.parentId === parent.id && !c.hidden) : []
 
   async function commitDetail() {
     if (!parent) return

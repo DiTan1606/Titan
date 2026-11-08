@@ -23,7 +23,7 @@ export async function suggestCategories(
   if (inputs.length === 0) return []
 
   const [{ data: cats }, { data: memory }] = await Promise.all([
-    db.from('categories').select('id, name, kind, parent_id').eq('user_id', userId).is('hidden_at', null),
+    db.from('categories').select('id, name, kind, parent_id, hidden_at').eq('user_id', userId),
     db
       .from('merchant_memory')
       .select('keyword, category_id, hits')
@@ -31,7 +31,9 @@ export async function suggestCategories(
       .in('keyword', [...new Set(inputs.map((i) => i.keyword).filter(Boolean))]),
   ])
 
-  const categories: CategoryOption[] = (cats ?? []).map((c) => ({
+  // Bỏ danh mục đang ẩn, kể cả danh mục chi tiết nằm trong danh mục cha đang ẩn (V15)
+  const hidden = new Set((cats ?? []).filter((c) => c.hidden_at).map((c) => c.id))
+  const categories: CategoryOption[] = (cats ?? []).filter((c) => !c.hidden_at && !(c.parent_id && hidden.has(c.parent_id))).map((c) => ({
     id: c.id,
     name: c.name,
     kind: c.kind,

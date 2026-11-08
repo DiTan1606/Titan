@@ -4,7 +4,7 @@ import { motion } from 'motion/react'
 import { useEffect, useState } from 'react'
 import { EmptyState } from './components/EmptyState'
 import { HomeScreen } from './features/home/HomeScreen'
-import { MascotIntro } from './features/intro/MascotIntro'
+import { Tour } from './features/intro/Tour'
 import { NotificationsSheet } from './features/notifications/NotificationsSheet'
 import { Onboarding } from './features/onboarding/Onboarding'
 import { SignIn } from './features/onboarding/SignIn'
@@ -75,7 +75,7 @@ function SignedIn() {
     setAdding(true)
   }
 
-  // V14-16: Két giới thiệu app lần đầu sau thiết lập ban đầu; xem lại được ở Profile
+  // V15: Két dẫn tour trên giao diện thật lần đầu sau thiết lập ban đầu; xem lại được ở Profile
   const saveSettings = useSaveSettings()
   const [replayIntro, setReplayIntro] = useState(false)
   const [planWizard, setPlanWizard] = useState(false)
@@ -87,13 +87,14 @@ function SignedIn() {
     setTab(t === 'plan' ? 'plan' : t === 'settings' || t === 'me' ? 'settings' : t === 'transactions' ? 'transactions' : 'home')
   }
   const introOpen = replayIntro || (!!profile.data?.onboarded_at && profile.data.settings?.intro_seen !== true)
-  const finishIntro = (goPlan: boolean) => {
+  const finishIntro = (next: 'settings' | 'plan' | null) => {
     setReplayIntro(false)
     saveSettings({ intro_seen: true }).catch(() => {})
-    if (goPlan) {
+    window.scrollTo(0, 0)
+    if (next === 'plan') {
       setPlanWizard(true)
       setTab('plan')
-    }
+    } else setTab(next ?? 'home')
   }
 
   // Bản cài mới (xóa icon rồi thêm lại) → tự đăng ký lại thông báo nếu đã cho phép
@@ -139,14 +140,14 @@ function SignedIn() {
         >
           {tab === 'home' && <HomeScreen onOpenPlan={() => setTab('plan')} onAdd={openAdd} onOpenNotifications={() => setNotifOpen(true)} />}
           {tab === 'transactions' && <TransactionsScreen />}
-          {tab === 'plan' && <PlanScreen openRecap={launch.recap === 'prev' ? 'prev' : undefined} openWizard={planWizard} onWizardOpened={() => setPlanWizard(false)} />}
+          {tab === 'plan' && <PlanScreen openRecap={launch.recap === 'prev' ? 'prev' : undefined} openWizard={planWizard} onWizardOpened={() => setPlanWizard(false)} onOpenSettings={() => setTab('settings')} />}
           {tab === 'settings' && <SettingsScreen onOpenNotifications={() => setNotifOpen(true)} />}
           {tab === 'profile' && <ProfileScreen onReplayIntro={() => setReplayIntro(true)} />}
         </motion.main>
 
       <TabBar tab={tab} onTab={setTab} homeBadge={pending.data} />
       <NotificationsSheet open={notifOpen} onClose={() => setNotifOpen(false)} onNavigate={openUrl} />
-      <MascotIntro open={introOpen} name={nicknameOf(profile.data) ?? 'bạn'} onDone={finishIntro} />
+      <Tour open={introOpen} name={nicknameOf(profile.data) ?? 'bạn'} onTab={setTab} onDone={finishIntro} />
 
 
       <Sheet

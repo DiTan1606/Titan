@@ -23,6 +23,7 @@ export function TabBar(props: { tab: Tab; onTab: (t: Tab) => void; homeBadge?: n
               key={id}
               type="button"
               aria-label={label}
+              data-tour={`tab-${id}`}
               aria-current={active ? 'page' : undefined}
               onClick={() => props.onTab(id)}
               className={`relative flex h-14 flex-1 items-center justify-center ${active ? 'text-brand-500' : 'text-ink-400'}`}

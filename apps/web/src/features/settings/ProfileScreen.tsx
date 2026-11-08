@@ -40,11 +40,11 @@ export function ProfileScreen(props: { onReplayIntro?: () => void }) {
         {user.data?.email && <p className="text-sm text-ink-400">{user.data.email}</p>}
       </section>
 
-      <button type="button" onClick={props.onReplayIntro} className="card flex items-center gap-3 p-4 text-left active:scale-[0.99]">
+      <button type="button" data-tour="profile-tour" onClick={props.onReplayIntro} className="card flex items-center gap-3 p-4 text-left active:scale-[0.99]">
         <TitanSafe size={44} mood="smirk" float={false} />
         <span className="min-w-0 flex-1">
-          <span className="block font-extrabold">Nghe Két giới thiệu lại</span>
-          <span className="block text-sm text-ink-500">Quên cách dùng thì Két nhắc, có cà khịa nhẹ</span>
+          <span className="block font-extrabold">Đi một vòng với Két</span>
+          <span className="block text-sm text-ink-500">Két dẫn đi xem lại từng tab, có cà khịa nhẹ</span>
         </span>
         <ChevronRight size={20} className="shrink-0 text-ink-300" />
       </button>

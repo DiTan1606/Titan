@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { CalendarDays, ChevronRight } from 'lucide-react'
 import { createElement, useState } from 'react'
 import { dayKindsConfig, type DayKindsConfig, serializeKinds } from '@shared/budget.ts'
-import { useProfile, useSaveSettings } from '../../lib/data'
+import { useMarkConfigSeen, useProfile, useSaveSettings } from '../../lib/data'
 import { supabase } from '../../lib/supabase'
 import { useVnDays } from '../../lib/useVnDays'
 import { Sheet } from '../../ui/Sheet'
@@ -21,6 +21,7 @@ export function DayKindsCard() {
   const toast = useToast()
   const { today } = useVnDays()
   const [editing, setEditing] = useState(false)
+  const markSeen = useMarkConfigSeen()
   const kinds = dayKindsConfig(profile.data?.settings?.day_kinds)
 
   async function onSave(draft: DayKindsConfig) {
@@ -38,7 +39,13 @@ export function DayKindsCard() {
 
   return (
     <>
-      <button type="button" onClick={() => setEditing(true)} className="card flex items-center gap-3 p-4 text-left active:scale-[0.99]">
+      <button
+        type="button"
+        onClick={() => {
+          setEditing(true)
+          markSeen()
+        }}
+        className="card flex items-center gap-3 p-4 text-left active:scale-[0.99]">
         <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#FAECE7] text-[#993C1D]">
           <CalendarDays size={22} strokeWidth={2.4} />
         </span>

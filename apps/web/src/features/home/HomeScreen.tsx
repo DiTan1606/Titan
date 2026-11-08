@@ -1,12 +1,13 @@
 import { CalendarRange, Landmark, PiggyBank, Plus, Target, Wallet } from 'lucide-react'
 import { motion } from 'motion/react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { DayKind } from '@shared/budget.ts'
 import { fundsOf, nicknameOf, usePendingCount, usePlan, useProfile, useSpendingStats, useWallets } from '../../lib/data'
 import { NewFundSheet } from '../funds/FundSheets'
 import { BellButton } from '../notifications/NotificationsSheet'
 import { FundTab } from './FundTab'
 import { homeMessage } from '../../lib/homeMessage'
+import { HOME_TAB_EVENT, type HomeTabRequest } from '../../lib/tour'
 import { useVnDays } from '../../lib/useVnDays'
 import { AnimatedVnd } from '../../ui/AnimatedNumber'
 import { PushBanner } from '../push/PushBanner'
@@ -46,6 +47,20 @@ export function HomeScreen(props: { onOpenPlan: () => void; onOpenNotifications:
   const funds = fundsOf(wallets.data)
   const fund = funds.find((f) => f.id === tab)
   const todayKind: DayKind = dayKinds[today] ?? 'normal'
+
+  // V15 · Tour của Két mở tab nhỏ đang giới thiệu và cuộn dải tab tới đó
+  const savingsId = funds.find((f) => f.isSavings)?.id
+  useEffect(() => {
+    const onReq = (e: Event) => {
+      const req = (e as CustomEvent<HomeTabRequest>).detail
+      const id = req === 'savings' ? savingsId : req
+      if (!id) return
+      setTab(id)
+      requestAnimationFrame(() => document.querySelector(`[data-home-tab="${id}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' }))
+    }
+    window.addEventListener(HOME_TAB_EVENT, onReq)
+    return () => window.removeEventListener(HOME_TAB_EVENT, onReq)
+  }, [savingsId])
 
   const nickname = nicknameOf(profile.data)
   const s = stats.data
@@ -98,14 +113,15 @@ export function HomeScreen(props: { onOpenPlan: () => void; onOpenNotifications:
         <PushBanner />
       </div>
 
-      <motion.section {...rise(2)} className="card flex min-h-0 flex-1 flex-col p-2.5">
+      <motion.section {...rise(2)} data-tour="home-card" className="card flex min-h-0 flex-1 flex-col p-2.5">
         {/* V14: trượt ngang, vừa đủ 2 tab một lúc: VCB · Tiền mặt · Tiết kiệm · các quỹ · + */}
         <div className="flex shrink-0 snap-x snap-mandatory scroll-px-1 gap-1 overflow-x-auto rounded-2xl bg-ink-100 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <TabButton active={tab === 'bank'} onClick={() => setTab('bank')} icon={<Landmark size={18} strokeWidth={2.4} />} label="VCB" amount={bank?.balance} badge={pending.data} />
-          <TabButton active={tab === 'cash'} onClick={() => setTab('cash')} icon={<Wallet size={18} strokeWidth={2.4} />} label="Tiền mặt" amount={cash?.balance} />
+          <TabButton id="bank" active={tab === 'bank'} onClick={() => setTab('bank')} icon={<Landmark size={18} strokeWidth={2.4} />} label="VCB" amount={bank?.balance} badge={pending.data} />
+          <TabButton id="cash" active={tab === 'cash'} onClick={() => setTab('cash')} icon={<Wallet size={18} strokeWidth={2.4} />} label="Tiền mặt" amount={cash?.balance} />
           {funds.map((f) => (
             <TabButton
               key={f.id}
+              id={f.id}
               active={tab === f.id}
               onClick={() => setTab(f.id)}
               icon={f.isSavings ? <PiggyBank size={18} strokeWidth={2.4} /> : <Target size={18} strokeWidth={2.4} />}
@@ -116,6 +132,7 @@ export function HomeScreen(props: { onOpenPlan: () => void; onOpenNotifications:
           <button
             type="button"
             aria-label="Mở quỹ mới"
+            data-tour="home-addfund"
             onClick={() => setCreatingFund(true)}
             className="flex w-[calc(50%-0.125rem)] shrink-0 snap-start items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-ink-300 text-sm font-extrabold text-ink-500 active:bg-white/60"
           >
@@ -137,10 +154,11 @@ export function HomeScreen(props: { onOpenPlan: () => void; onOpenNotifications:
   )
 }
 
-function TabButton(props: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string; amount?: number; badge?: number }) {
+function TabButton(props: { id: string; active: boolean; onClick: () => void; icon: React.ReactNode; label: string; amount?: number; badge?: number }) {
   return (
     <button
       type="button"
+      data-home-tab={props.id}
       onClick={props.onClick}
       aria-pressed={props.active}
       className={`relative flex w-[calc(50%-0.125rem)] shrink-0 snap-start flex-col items-start rounded-xl px-3 py-1.5 text-left transition-colors ${

@@ -1,13 +1,15 @@
 import { CalendarCheck, CalendarPlus, ChevronRight, Clapperboard } from 'lucide-react'
-import { motion } from 'motion/react'
+import { AnimatePresence, motion } from 'motion/react'
+import { createPortal } from 'react-dom'
 import { useEffect, useState } from 'react'
 import { monthDays } from '@shared/budget.ts'
-import { prevMonth, usePastMonths, usePlan } from '../../lib/data'
+import { prevMonth, useMarkConfigSeen, usePastMonths, usePlan, useProfile } from '../../lib/data'
 import { formatVnd } from '../../lib/format'
 import { monthTitle } from '../../lib/period'
 import { useVnDays } from '../../lib/useVnDays'
 import { Button } from '../../ui/Button'
 import { Sheet } from '../../ui/Sheet'
+import { TitanSafe } from '../../components/TitanSafe'
 import { RecapStory } from '../recap/RecapStory'
 import { MonthPlanDetail } from './MonthPlanDetail'
 import { PlanWizard } from './PlanWizard'
@@ -18,7 +20,7 @@ import { PlanWizard } from './PlanWizard'
  * - Đã lập: "Xem kế hoạch tháng này" → chi tiết kế hoạch. Ngày cuối tháng có thêm nút Tổng kết.
  * - Qua tháng mới: tháng vừa rồi tự thành thẻ tháng trước, bấm vào xem lại tổng kết (recap) của tháng đó.
  */
-export function PlanScreen(props: { openRecap?: 'prev'; openWizard?: boolean; onWizardOpened?: () => void }) {
+export function PlanScreen(props: { openRecap?: 'prev'; openWizard?: boolean; onWizardOpened?: () => void; onOpenSettings?: () => void }) {
   const { today } = useVnDays()
   const { month, ready, plan, result } = usePlan(today)
   const past = usePastMonths(month)
@@ -28,6 +30,11 @@ export function PlanScreen(props: { openRecap?: 'prev'; openWizard?: boolean; on
     if (openWizard) onWizardOpened?.()
   }, [openWizard, onWizardOpened])
   const [viewing, setViewing] = useState(false)
+  // V15 · Lần đầu lập kế hoạch mà chưa mở cấu hình chi tiêu lần nào → Két nhắc một lần
+  const profile = useProfile()
+  const markSeen = useMarkConfigSeen()
+  const [nudging, setNudging] = useState(false)
+  const startPlan = () => (profile.data?.settings?.config_seen === true ? setSetting(true) : setNudging(true))
   const [recapMonth, setRecapMonth] = useState<string | null>(props.openRecap === 'prev' ? prevMonth(month) : null)
 
   const lastDay = Number(today.slice(8, 10)) === monthDays(month).length
@@ -44,7 +51,7 @@ export function PlanScreen(props: { openRecap?: 'prev'; openWizard?: boolean; on
           initial={{ scale: 0.96, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           whileTap={{ scale: 0.98 }}
-          onClick={() => setSetting(true)}
+          onClick={startPlan}
           className="flex flex-col rounded-[1.75rem] border-b-[6px] border-brand-600 bg-brand-400 p-5 text-left text-white"
         >
           <span className="grid size-12 place-items-center rounded-2xl bg-white/20">
@@ -133,6 +140,55 @@ export function PlanScreen(props: { openRecap?: 'prev'; openWizard?: boolean; on
       </Sheet>
       <PlanWizard open={setting} month={month} today={today} onClose={() => setSetting(false)} />
       <RecapStory month={recapMonth} onClose={() => setRecapMonth(null)} />
+      <ConfigNudge
+        open={nudging}
+        onSettings={() => {
+          setNudging(false)
+          markSeen()
+          props.onOpenSettings?.()
+        }}
+        onPlan={() => {
+          setNudging(false)
+          markSeen()
+          setSetting(true)
+        }}
+      />
     </div>
+  )
+}
+
+/** V15 · Két nhắc: chỉnh danh mục, loại ngày trước rồi hãy lập kế hoạch (chỉ nhắc một lần) */
+function ConfigNudge(props: { open: boolean; onSettings: () => void; onPlan: () => void }) {
+  return createPortal(
+    <AnimatePresence>
+      {props.open && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-end bg-[rgba(17,24,32,0.55)] px-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Xem cấu hình trước khi lập kế hoạch"
+        >
+          <motion.div initial={{ y: 40 }} animate={{ y: 0 }} className="mx-auto w-full max-w-md rounded-[1.75rem] bg-white p-5 text-center shadow-xl">
+            <TitanSafe size={96} mood="judge" className="mx-auto" />
+            <h2 className="mt-3 text-xl font-extrabold tracking-tight">Khoan, xem cấu hình chưa?</h2>
+            <p className="mt-1 text-[15px] text-ink-600">
+              Danh mục với các loại ngày đang là đồ tui cài sẵn. Lập kế hoạch xong mới sửa thì ngân sách lệch hết đó. Liếc qua một chút đi.
+            </p>
+            <div className="mt-4 flex flex-col gap-2">
+              <Button variant="primary" full onClick={props.onSettings}>
+                Xem cấu hình
+              </Button>
+              <Button full caps={false} onClick={props.onPlan}>
+                Thôi, lập luôn
+              </Button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    document.body,
   )
 }

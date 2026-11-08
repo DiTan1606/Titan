@@ -13,10 +13,12 @@ export function FundTab(props: { fund: Fund }) {
   const f = props.fund
   const [mode, setMode] = useState<FundMode | null>(null)
   const [settingUp, setSettingUp] = useState(false)
+  // Nền nhạt theo màu thẻ quỹ, giống tab VCB (nền xanh nhạt theo thẻ VCB)
+  const bg = { background: `color-mix(in srgb, ${fundColor(f)} 11%, white)` }
 
   if (!f.accountSuffix)
     return (
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 rounded-2xl bg-ink-50 px-6 text-center">
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 rounded-2xl px-6 text-center" style={bg}>
         <span className="grid size-14 place-items-center rounded-2xl text-white" style={{ background: fundColor(f) }}>
           <Landmark size={28} strokeWidth={2.2} />
         </span>
@@ -37,7 +39,7 @@ export function FundTab(props: { fund: Fund }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2.5">
-      <button type="button" onClick={() => setMode('deposit')} className="flex min-h-0 flex-1 flex-col rounded-2xl bg-ink-50 text-left">
+      <button type="button" onClick={() => setMode('deposit')} className="flex min-h-0 flex-1 flex-col rounded-2xl text-left" style={bg}>
         <FloatingFundCard name={f.name} color={fundColor(f)} balance={f.balance} target={f.target} isSavings={f.isSavings} account={fundAccountLabel(f)} />
       </button>
       <div className="grid shrink-0 grid-cols-2 gap-2">
