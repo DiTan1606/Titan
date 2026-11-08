@@ -174,7 +174,7 @@ export function Onboarding() {
 
       {error && step !== 'push' && <p className="mt-4 text-sm font-semibold text-red-600">{error}</p>}
 
-      {/* Đăng nhập nhầm tài khoản Google → đổi tài khoản (chưa thiết lập xong thì chưa vào được tab Tôi) */}
+      {/* Đăng nhập nhầm tài khoản Google → đổi tài khoản (chưa thiết lập xong thì chưa vào được tab Cấu hình) */}
       {step === 'nickname' && (
         <button type="button" onClick={() => supabase.auth.signOut()} className="mt-auto pt-8 text-center text-sm font-bold text-ink-400">
           Không phải bạn? Đổi tài khoản Google
@@ -230,7 +230,7 @@ function PushStep(props: { on: boolean; onEnabled: () => void; busy: boolean; er
             <SquarePlus size={18} className="shrink-0 text-[#378ADD]" /> 2. Chọn "Thêm vào MH chính"
           </p>
           <p className="flex items-center gap-2">
-            <BellRing size={18} className="shrink-0 text-[#378ADD]" /> 3. Mở Titan từ màn hình chính, vào tab Tôi để bật
+            <BellRing size={18} className="shrink-0 text-[#378ADD]" /> 3. Mở Titan từ màn hình chính, vào tab Cấu hình để bật
           </p>
         </div>
       )}

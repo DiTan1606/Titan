@@ -7,8 +7,35 @@ import { CategoryIcon } from '../../ui/CategoryIcon'
 import { Sheet } from '../../ui/Sheet'
 import { useToast } from '../../ui/toast-context'
 
-/** V11-1 · Người dùng tự quản lý danh mục: thêm / đổi tên / ẩn cấp 1, ẩn cấp 2 */
+/** V14 · Cấu hình · Danh mục: thẻ gọn, bấm vào mới mở trang quản lý (giống Các loại ngày) */
 export function CategoriesCard() {
+  const categories = useCategories()
+  const [open, setOpen] = useState(false)
+  const cats = categories.data ?? []
+  const count = (k: 'expense' | 'income') => cats.filter((c) => c.kind === k && !c.parentId && c.systemKey !== 'unknown').length
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)} className="card flex items-center gap-3 p-4 text-left active:scale-[0.99]">
+        <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#EEEDFE] text-[#534AB7]">
+          <Shapes size={22} strokeWidth={2.4} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-extrabold">Danh mục</span>
+          <span className="block text-sm text-ink-500">
+            {count('expense')} danh mục chi · {count('income')} danh mục thu
+          </span>
+        </span>
+        <ChevronRight size={20} className="shrink-0 text-ink-300" />
+      </button>
+      <Sheet open={open} onClose={() => setOpen(false)} title="Danh mục" autoFocus={false}>
+        {open && <CategoriesManager />}
+      </Sheet>
+    </>
+  )
+}
+
+/** V11-1 · Người dùng tự quản lý danh mục: thêm / đổi tên / ẩn cấp 1, ẩn cấp 2 */
+function CategoriesManager() {
   const categories = useCategories()
   const refresh = useRefreshMoney()
   const toast = useToast()
@@ -29,16 +56,8 @@ export function CategoriesCard() {
   }
 
   return (
-    <section className="card p-4">
-      <div className="flex items-center gap-3">
-        <span className="grid size-11 place-items-center rounded-2xl bg-[#FAECE7] text-[#993C1D]">
-          <Shapes size={22} strokeWidth={2.4} />
-        </span>
-        <div className="flex-1">
-          <h2 className="font-extrabold">Danh mục</h2>
-          <p className="text-sm text-ink-500">Danh mục chi tiết tự tạo khi bạn gõ lúc duyệt</p>
-        </div>
-      </div>
+    <section>
+      <p className="-mt-2 text-sm text-ink-500">Danh mục chi tiết tự tạo khi bạn gõ lúc duyệt.</p>
 
       <div className="mt-3 grid grid-cols-2 gap-2">
         {(['expense', 'income'] as const).map((k) => (

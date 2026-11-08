@@ -29,3 +29,6 @@ export function directionFor(t: Pick<Transaction, 'type' | 'walletId'>, walletId
   if (t.type === 'borrow') return null
   return OUT.has(t.type) ? 'out' : 'in'
 }
+
+/** "2026-11-01" → "Tháng 11/2026" */
+export const monthTitle = (month: string) => `Tháng ${Number(month.slice(5, 7))}/${month.slice(0, 4)}`

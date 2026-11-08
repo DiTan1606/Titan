@@ -1,36 +1,90 @@
 // Kế hoạch chi tiêu tháng (docs/07): túi cố định, tiết kiệm trước, tiền linh hoạt chia theo KIỂU NGÀY.
 // Hàm thuần — mọi con số trên tab Kế hoạch và Trang chủ đều đi qua đây, nên được test kỹ.
 
-export type DayKind = 'home' | 'normal' | 'fancy' | 'party'
+/** Khóa loại ngày: 4 loại có sẵn (home, normal, fancy, party) hoặc loại người dùng tự thêm (V14-11) */
+export type DayKind = string
 
-/** Trọng số chia tiền theo kiểu ngày (V11-4) */
-export const DAY_WEIGHT: Record<DayKind, number> = { home: 0.5, normal: 1, fancy: 1.8, party: 2.5 }
+/** Trọng số mặc định của 4 loại có sẵn (V11-4) */
+export const DAY_WEIGHT: Record<string, number> = { home: 0.5, normal: 1, fancy: 1.8, party: 2.5 }
 
-export const DAY_LABEL: Record<DayKind, string> = {
-  home: 'Ở nhà',
-  normal: 'Bình thường',
-  fancy: 'Đi ăn sang',
-  party: 'Tiệc',
-}
+/** Bộ icon chọn cho loại ngày (tên icon, app web đổi ra hình) */
+export const DAY_ICONS = [
+  'house', 'smile', 'utensils', 'party', 'coffee', 'heart', 'book', 'plane', 'car', 'gift',
+  'dumbbell', 'music', 'gamepad', 'cart', 'stethoscope', 'beer', 'briefcase', 'graduation', 'sun', 'moon',
+] as const
 
-export const DAY_KINDS: DayKind[] = ['home', 'normal', 'fancy', 'party']
+/** Bộ màu chọn cho loại ngày */
+export const DAY_COLORS = ['#378ADD', '#888780', '#D85A30', '#D4537E', '#1D9E75', '#534AB7', '#BA7517', '#E24B4A'] as const
 
-/** V13-4 · Kiểu ngày tùy chỉnh theo tháng (month_plans.day_kinds): tên, hệ số chia tiền, ẩn */
-export type DayKindConfig = { label: string; weight: number; off: boolean }
-export type DayKindsConfig = Record<DayKind, DayKindConfig>
+export const MAX_DAY_KINDS = 8
 
-/** Đọc cấu hình thô từ DB, thiếu/sai thì dùng mặc định. "Bình thường" luôn hệ số 1 và không ẩn được. */
+/** V13-4 / V14-11 · Một loại ngày: tên, hệ số chia tiền, icon, màu */
+export type DayKindDef = { key: DayKind; label: string; weight: number; icon: string; color: string }
+/** Danh sách loại ngày theo thứ tự hiển thị; luôn có "normal" (Bình thường, hệ số 1, không xóa được) */
+export type DayKindsConfig = DayKindDef[]
+
+export const DEFAULT_DAY_KINDS: DayKindsConfig = [
+  { key: 'home', label: 'Ở nhà', weight: 0.5, icon: 'house', color: '#378ADD' },
+  { key: 'normal', label: 'Bình thường', weight: 1, icon: 'smile', color: '#888780' },
+  { key: 'fancy', label: 'Đi ăn sang', weight: 1.8, icon: 'utensils', color: '#D85A30' },
+  { key: 'party', label: 'Tiệc', weight: 2.5, icon: 'party', color: '#D4537E' },
+]
+
+const KEY_RE = /^[a-z0-9_]{1,24}$/
+const COLOR_RE = /^#[0-9A-Fa-f]{6}$/
+const clampWeight = (w: unknown, fallback: number) =>
+  typeof w === 'number' && Number.isFinite(w) ? Math.round(Math.min(5, Math.max(0.1, w)) * 10) / 10 : fallback
+
+/**
+ * Đọc cấu hình thô (profiles.settings.day_kinds / month_plans.day_kinds), thiếu / sai thì dùng mặc định.
+ * Dạng mới: { v: 2, kinds: [...] }. Dạng cũ v1.3: { home: { label, weight, off }, ... } (loại "off" bị bỏ).
+ * "Bình thường" luôn có, hệ số 1.
+ */
 export function dayKindsConfig(raw: unknown): DayKindsConfig {
-  const src = raw && typeof raw === 'object' ? (raw as Record<string, Partial<DayKindConfig>>) : {}
-  const out = {} as DayKindsConfig
-  for (const k of DAY_KINDS) {
-    const r = src[k] ?? {}
-    const label = typeof r.label === 'string' && r.label.trim() ? r.label.trim().slice(0, 20) : DAY_LABEL[k]
-    const w = typeof r.weight === 'number' && Number.isFinite(r.weight) ? Math.min(5, Math.max(0.1, r.weight)) : DAY_WEIGHT[k]
-    out[k] = k === 'normal' ? { label, weight: 1, off: false } : { label, weight: w, off: r.off === true }
+  const obj = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
+  let out: DayKindsConfig
+  if (Array.isArray(obj.kinds)) {
+    const seen = new Set<string>()
+    out = []
+    for (const r of obj.kinds as Partial<DayKindDef>[]) {
+      if (!r || typeof r.key !== 'string' || !KEY_RE.test(r.key) || seen.has(r.key)) continue
+      seen.add(r.key)
+      const def = DEFAULT_DAY_KINDS.find((d) => d.key === r.key)
+      out.push({
+        key: r.key,
+        label: typeof r.label === 'string' && r.label.trim() ? r.label.trim().slice(0, 20) : (def?.label ?? 'Loại ngày'),
+        weight: clampWeight(r.weight, def?.weight ?? 1),
+        icon: typeof r.icon === 'string' && (DAY_ICONS as readonly string[]).includes(r.icon) ? r.icon : (def?.icon ?? 'smile'),
+        color: typeof r.color === 'string' && COLOR_RE.test(r.color) ? r.color : (def?.color ?? '#888780'),
+      })
+      if (out.length === MAX_DAY_KINDS) break
+    }
+  } else {
+    out = []
+    for (const d of DEFAULT_DAY_KINDS) {
+      const r = (obj[d.key] ?? {}) as { label?: unknown; weight?: unknown; off?: unknown }
+      if (d.key !== 'normal' && r.off === true) continue
+      const label = typeof r.label === 'string' && r.label.trim() ? r.label.trim().slice(0, 20) : d.label
+      out.push({ ...d, label, weight: clampWeight(r.weight, d.weight) })
+    }
   }
+  const normal = out.find((k) => k.key === 'normal')
+  if (normal) normal.weight = 1
+  else out.unshift({ ...DEFAULT_DAY_KINDS[1] })
   return out
 }
+
+/** Loại ngày theo khóa; khóa đã bị xóa → "Bình thường" */
+export const kindDef = (c: DayKindsConfig, key: DayKind | undefined): DayKindDef =>
+  c.find((k) => k.key === key) ?? c.find((k) => k.key === 'normal')!
+
+/** Khóa cho loại ngày mới: k1, k2… chưa dùng */
+export function newKindKey(c: DayKindsConfig): DayKind {
+  for (let i = 1; ; i++) if (!c.some((k) => k.key === `k${i}`)) return `k${i}`
+}
+
+/** Dạng lưu xuống DB */
+export const serializeKinds = (c: DayKindsConfig) => ({ v: 2, kinds: c })
 
 export type FixedItem = { id: string; name: string; amount: number; dueDay: number | null; categoryId: string | null }
 
@@ -46,10 +100,15 @@ export type PlanInput = {
   spends: Spend[]
   /** kiểu ngày người dùng đã chọn; ngày không có → bình thường */
   dayKinds: Record<string, DayKind>
-  /** hệ số chia tiền theo kiểu ngày (V13-4); thiếu → DAY_WEIGHT */
-  weights?: Partial<Record<DayKind, number>>
+  /** hệ số chia tiền theo loại ngày (V13-4); không truyền → DAY_WEIGHT. Loại không có hệ số → như ngày bình thường (1) */
+  weights?: Record<DayKind, number>
   /** ngày lập kế hoạch: các ngày trước đó không có hạn mức và không tính vào hũ dư (lập giữa tháng) */
   startDay?: string
+  /**
+   * V14-12 · Hạn mức đã chốt của các ngày đã qua (bảng day_limits). Ngày đã qua dùng đúng số đã chốt,
+   * không tính lại theo kiểu ngày hiện tại — đổi kế hoạch tương lai không làm ngày cũ bị "vượt mức" oan.
+   */
+  frozen?: Record<string, number>
 }
 
 export type DayPlan = { date: string; kind: DayKind; planned: number; spent: number; past: boolean; isToday: boolean }
@@ -85,13 +144,13 @@ export function monthDays(day: string): string[] {
 
 export const monthStart = (day: string) => `${day.slice(0, 7)}-01`
 
-export const weightsOf = (c: DayKindsConfig): Record<DayKind, number> =>
-  Object.fromEntries(DAY_KINDS.map((k) => [k, c[k].weight])) as Record<DayKind, number>
+export const weightsOf = (c: DayKindsConfig): Record<DayKind, number> => Object.fromEntries(c.map((k) => [k.key, k.weight]))
 
 export function computePlan(input: PlanInput): PlanResult {
   const days = monthDays(input.today)
   const kindOf = (d: string): DayKind => input.dayKinds[d] ?? 'normal'
-  const WEIGHT: Record<DayKind, number> = { ...DAY_WEIGHT, ...input.weights }
+  const table = input.weights ?? DAY_WEIGHT
+  const weightOf = (k: DayKind) => table[k] ?? 1
 
   // Khoản cố định: chi có danh mục (hoặc danh mục cha) trùng danh mục của khoản cố định (V11-3)
   const fixedCats = new Set(input.fixed.map((f) => f.categoryId).filter((c): c is string => !!c))
@@ -143,8 +202,9 @@ export function computePlan(input: PlanInput): PlanResult {
     }
     if (past || isToday) {
       const remaining = Math.max(0, flexibleBudget - spentSoFar)
-      const weightLeft = days.slice(i).reduce((s, x) => s + WEIGHT[kindOf(x)], 0)
-      const planned = roundK((remaining * WEIGHT[kindOf(d)]) / weightLeft)
+      const weightLeft = days.slice(i).reduce((s, x) => s + weightOf(kindOf(x)), 0)
+      const locked = past ? input.frozen?.[d] : undefined
+      const planned = locked ?? roundK((remaining * weightOf(kindOf(d))) / weightLeft)
       plans.push({ date: d, kind: kindOf(d), planned, spent, past, isToday })
       if (past) surplus += planned - spent
       if (isToday) todayLimit = planned
@@ -157,12 +217,12 @@ export function computePlan(input: PlanInput): PlanResult {
   const spentBeforeToday = spentSoFar - todaySpent
   const afterToday = Math.max(0, flexibleBudget - spentBeforeToday - Math.max(todayLimit, todaySpent))
   const future = days.filter((d) => d > input.today)
-  const futureWeight = future.reduce((s, d) => s + WEIGHT[kindOf(d)], 0)
+  const futureWeight = future.reduce((s, d) => s + weightOf(kindOf(d)), 0)
   for (const d of future) {
     plans.push({
       date: d,
       kind: kindOf(d),
-      planned: futureWeight ? roundK((afterToday * WEIGHT[kindOf(d)]) / futureWeight) : 0,
+      planned: futureWeight ? roundK((afterToday * weightOf(kindOf(d))) / futureWeight) : 0,
       spent: 0,
       past: false,
       isToday: false,

@@ -19,6 +19,7 @@ cleanup() {
           delete from public.merchant_memory where user_id = '$uid';
           delete from public.api_tokens where user_id = '$uid';
           update public.profiles set onboarded_at = null where id = '$uid';
+          delete from public.wallets where user_id = '$uid' and kind = 'fund' and name = 'Quỹ test';
           update public.wallets set opening_balance = 0, account_suffix = null where user_id = '$uid';" >/dev/null
 }
 cleanup
@@ -117,6 +118,16 @@ as_user "select public.set_bank_account('1012344321')" >/dev/null
 $DB -c "delete from public.sms_messages where user_id='$uid' and dedupe_key = encode(sha256(convert_to('vcb-order:10000000904','UTF8')),'hex');" >/dev/null
 check "đủ số tài khoản → phân biệt đúng tiền ra" "$(send "$TOKEN" "$R_TWIN" | head -1)" '"type":"expense"'
 check "người nhận đúng là người trùng đuôi" "$($DB -c "select counterparty from public.transactions where user_id='$uid' and amount=60000")" "TRAN THI C"
+
+echo "▶ quỹ gắn tài khoản thật (V14-10)"
+FUND=$(as_user "select public.create_fund('Quỹ test', '19033344455', 'MB')")
+R_DEP=$(receipt 10000000905 1012344321 19033344455 'NGUYEN VAN B' '500,000' 'de danh')
+check "chuyển tới tài khoản quỹ → transfer" "$(send "$TOKEN" "$R_DEP" | head -1)" '"type":"transfer"'
+check "bỏ vào quỹ: tự duyệt, ví đích là quỹ" "$($DB -c "select status || ' ' || (to_wallet_id = '$FUND') from public.transactions where user_id='$uid' and amount=500000")" "confirmed true"
+R_WD=$(receipt 10000000906 19033344455 1012344321 'NGUYEN VAN B' '200,000' 'rut quy')
+check "tiền từ tài khoản quỹ về VCB → transfer" "$(send "$TOKEN" "$R_WD" | head -1)" '"type":"transfer"'
+check "số dư quỹ sau bỏ vào / rút ra" "$($DB -c "select balance from public.wallet_balances where wallet_id='$FUND'")" "300000"
+check "không tính là chi tiêu / thu nhập" "$($DB -c "select count(*) from public.transactions where user_id='$uid' and amount in (500000, 200000) and type <> 'transfer'")" "0"
 
 echo
 echo "Kết quả: $pass qua, $fail lỗi"

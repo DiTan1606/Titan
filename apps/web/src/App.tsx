@@ -8,6 +8,7 @@ import { Onboarding } from './features/onboarding/Onboarding'
 import { SignIn } from './features/onboarding/SignIn'
 import { QuickEntry } from './features/quick-entry/QuickEntry'
 import { PlanScreen } from './features/plan/PlanScreen'
+import { ProfileScreen } from './features/settings/ProfileScreen'
 import { SettingsScreen } from './features/settings/SettingsScreen'
 import { TransactionsScreen } from './features/transactions/TransactionsScreen'
 import { usePendingCount, useProfile } from './lib/data'
@@ -61,7 +62,8 @@ function SignedIn() {
   const profile = useProfile()
   const pending = usePendingCount()
   const launch = LAUNCH
-  const [tab, setTab] = useState<Tab>(launch.tab === 'plan' || launch.tab === 'me' ? launch.tab : 'home')
+  // /?tab=me (link cũ trong thông báo) → tab Cấu hình
+  const [tab, setTab] = useState<Tab>(launch.tab === 'plan' ? 'plan' : launch.tab === 'me' || launch.tab === 'settings' ? 'settings' : 'home')
   // Ghi nhanh mở từ tab VCB / Tiền mặt trên Trang chủ → ghi thẳng vào ví đó
   const [adding, setAdding] = useState(false)
   // Ví + loại (chi / thu) của lần ghi; giữ nguyên nội dung khi bảng đang trượt xuống
@@ -101,7 +103,8 @@ function SignedIn() {
           {tab === 'home' && <HomeScreen onOpenPlan={() => setTab('plan')} onOpenDigest={() => setDigest(true)} onAdd={openAdd} />}
           {tab === 'transactions' && <TransactionsScreen />}
           {tab === 'plan' && <PlanScreen openRecap={launch.recap === 'prev' ? 'prev' : undefined} />}
-          {tab === 'me' && <SettingsScreen />}
+          {tab === 'settings' && <SettingsScreen />}
+          {tab === 'profile' && <ProfileScreen />}
         </motion.main>
 
       <TabBar tab={tab} onTab={setTab} homeBadge={pending.data} />

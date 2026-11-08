@@ -1,6 +1,7 @@
 // Truy vấn dữ liệu dùng chung (TanStack Query). RLS đảm bảo chỉ thấy dữ liệu của người đăng nhập.
 import { vnDate } from '@shared/quick-entry.ts'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect } from 'react'
 import { computePlan, type DayKind, dayKindsConfig, type DayKindsConfig, monthDays, monthStart, type Spend, weightsOf } from '@shared/budget.ts'
 import { buildRecap, type RecapTxn } from '@shared/recap.ts'
 import { type BillCounts, walletBills } from './bills'
@@ -9,10 +10,19 @@ import { supabase } from './supabase'
 export type Wallet = {
   id: string
   name: string
-  kind: 'bank' | 'cash' | 'external'
+  kind: 'bank' | 'cash' | 'external' | 'fund'
   balance: number
   accountSuffix: string | null
+  /** V14-10 · ví quỹ: màu thẻ, mục tiêu, tên ngân hàng giữ tiền, có phải ví Tiết kiệm mặc định */
+  color: string | null
+  target: number | null
+  bankName: string | null
+  isSavings: boolean
+  createdAt: string
 }
+
+/** Quỹ = ví loại 'fund' (Tiết kiệm + các quỹ người dùng mở), gắn một tài khoản ngân hàng thật */
+export type Fund = Wallet & { kind: 'fund' }
 
 export type Category = {
   id: string
@@ -63,7 +73,7 @@ export function useProfile() {
   })
 }
 
-const WALLET_ORDER = { bank: 0, cash: 1, external: 2 } as const
+const WALLET_ORDER = { bank: 0, cash: 1, fund: 2, external: 3 } as const
 
 /** Tất cả ví, gồm cả ví "Tài khoản khác" (không hiển thị số dư). Dùng `visibleWallets()` để hiển thị. */
 export function useWallets() {
@@ -72,18 +82,27 @@ export function useWallets() {
     queryFn: async (): Promise<Wallet[]> => {
       const [balances, wallets] = await Promise.all([
         supabase.from('wallet_balances').select('wallet_id, name, kind, balance'),
-        supabase.from('wallets').select('id, account_suffix'),
+        supabase.from('wallets').select('id, account_suffix, color, target, bank_name, is_savings, created_at').is('archived_at', null),
       ])
-      const suffix = new Map((throwIf(wallets) ?? []).map((w) => [w.id, w.account_suffix as string | null]))
+      const info = new Map((throwIf(wallets) ?? []).map((w) => [w.id as string, w]))
       return (throwIf(balances) ?? [])
-        .map((b) => ({
-          id: b.wallet_id,
-          name: b.name,
-          kind: b.kind as Wallet['kind'],
-          balance: Number(b.balance),
-          accountSuffix: suffix.get(b.wallet_id) ?? null,
-        }))
-        .sort((a, b) => WALLET_ORDER[a.kind] - WALLET_ORDER[b.kind])
+        .filter((b) => info.has(b.wallet_id))
+        .map((b) => {
+          const w = info.get(b.wallet_id)!
+          return {
+            id: b.wallet_id,
+            name: b.name,
+            kind: b.kind as Wallet['kind'],
+            balance: Number(b.balance),
+            accountSuffix: w.account_suffix ?? null,
+            color: w.color ?? null,
+            target: w.target === null ? null : Number(w.target),
+            bankName: w.bank_name ?? null,
+            isSavings: !!w.is_savings,
+            createdAt: w.created_at,
+          }
+        })
+        .sort((a, b) => WALLET_ORDER[a.kind] - WALLET_ORDER[b.kind] || Number(b.isSavings) - Number(a.isSavings) || a.createdAt.localeCompare(b.createdAt))
     },
   })
 }
@@ -235,7 +254,10 @@ export function useRefreshMoney() {
 }
 
 /** Ví hiển thị cho người dùng (bỏ ví "Tài khoản khác của bạn") */
-export const visibleWallets = (ws: Wallet[] | undefined) => (ws ?? []).filter((w) => w.kind !== 'external')
+export const visibleWallets = (ws: Wallet[] | undefined) => (ws ?? []).filter((w) => w.kind !== 'external' && w.kind !== 'fund')
+
+/** Các quỹ (Tiết kiệm trước) */
+export const fundsOf = (ws: Wallet[] | undefined) => (ws ?? []).filter((w): w is Fund => w.kind === 'fund')
 
 export function useTrash() {
   return useQuery({
@@ -354,11 +376,14 @@ export function useMonthPlan(month: string) {
   return useQuery({
     queryKey: ['plan', 'month', month],
     queryFn: async () => {
-      const row = throwIf(await supabase.from('month_plans').select('income, savings, created_at, day_kinds').eq('month', month).maybeSingle()) as {
+      const row = throwIf(
+        await supabase.from('month_plans').select('income, savings, created_at, day_kinds, income_sources').eq('month', month).maybeSingle(),
+      ) as {
         income: number
         savings: number
         created_at: string
         day_kinds: unknown
+        income_sources: { name: string; amount: number }[] | null
       } | null
       return row
         ? {
@@ -367,6 +392,7 @@ export function useMonthPlan(month: string) {
             createdDay: vnDate(new Date(row.created_at)),
             rawKinds: (row.day_kinds ?? {}) as Record<string, unknown>,
             kinds: dayKindsConfig(row.day_kinds),
+            incomeSources: (row.income_sources ?? []).map((x) => ({ name: String(x.name), amount: Number(x.amount) })),
           }
         : null
     },
@@ -431,34 +457,28 @@ export function useCategoryBudgets() {
   })
 }
 
-export type Fund = { id: string; name: string; target: number | null; isDefault: boolean; balance: number }
-
-export function useFunds() {
+/** Toàn bộ dữ liệu kế hoạch của tháng → kết quả tính (null nếu chưa lập kế hoạch) */
+export function useDayLimits(month: string) {
   return useQuery({
-    queryKey: ['funds'],
-    queryFn: async (): Promise<Fund[]> =>
-      (
-        throwIf(
-          await supabase.from('fund_balances').select('fund_id, name, target, is_default, balance').order('is_default', { ascending: false }).order('created_at'),
-        ) ?? []
-      ).map((f) => ({
-        id: f.fund_id,
-        name: f.name,
-        target: f.target === null ? null : Number(f.target),
-        isDefault: f.is_default,
-        balance: Number(f.balance),
-      })),
+    queryKey: ['plan', 'limits', month],
+    queryFn: async () => {
+      const end = new Date(`${month}T00:00:00Z`)
+      end.setUTCMonth(end.getUTCMonth() + 1)
+      const rows =
+        throwIf(await supabase.from('day_limits').select('day, planned').gte('day', month).lt('day', end.toISOString().slice(0, 10))) ?? []
+      return Object.fromEntries(rows.map((r) => [r.day as string, Number(r.planned)])) as Record<string, number>
+    },
   })
 }
 
-/** Toàn bộ dữ liệu kế hoạch của tháng → kết quả tính (null nếu chưa lập kế hoạch) */
 export function usePlan(today: string) {
   const month = monthStart(today)
   const plan = useMonthPlan(month)
   const recurring = useRecurringItems()
   const days = useDayPlans(month)
   const spends = useMonthSpends(month)
-  const ready = plan.isSuccess && recurring.isSuccess && days.isSuccess && spends.isSuccess
+  const limits = useDayLimits(month)
+  const ready = plan.isSuccess && recurring.isSuccess && days.isSuccess && spends.isSuccess && limits.isSuccess
   const result =
     ready && plan.data
       ? computePlan({
@@ -470,10 +490,23 @@ export function usePlan(today: string) {
           dayKinds: days.data,
           weights: weightsOf(plan.data.kinds),
           startDay: plan.data.createdDay,
+          frozen: limits.data,
         })
       : null
+
+  // V14-12: chốt hạn mức hôm nay (ghi đè trong ngày, qua ngày mới thì DB khóa lại)
+  const todayLimit = result ? Math.max(0, result.todayLimit) : null
+  const stored = limits.data?.[today]
+  useEffect(() => {
+    if (todayLimit === null || todayLimit === stored) return
+    supabase
+      .from('day_limits')
+      .upsert({ day: today, planned: todayLimit })
+      .then(({ error }) => error && console.warn('Chốt hạn mức hôm nay', error.message))
+  }, [today, todayLimit, stored])
+
   const kinds: DayKindsConfig = plan.data?.kinds ?? dayKindsConfig(null)
-  return { month, ready, plan: plan.data ?? null, result, spends: spends.data ?? [], dayKinds: days.data ?? {}, kinds }
+  return { month, ready, plan: plan.data ?? null, result, spends: spends.data ?? [], dayKinds: days.data ?? {}, kinds, limits: limits.data ?? {} }
 }
 
 /** Danh mục cấp 2: tìm theo tên (không phân biệt hoa thường) trong danh mục cha, chưa có thì tạo */
@@ -550,7 +583,7 @@ export function useRecap(month: string | null, today: string) {
       const prev = monthRange(prevMonth(m))
       const end = new Date(`${m}T00:00:00Z`)
       end.setUTCMonth(end.getUTCMonth() + 1)
-      const [rows, prevRows, cats, plan, recurring, days, funds] = await Promise.all([
+      const [rows, prevRows, cats, plan, recurring, days, funds, limits] = await Promise.all([
         supabase
           .from('transactions')
           .select('amount, occurred_at, merchant, description, category_id, category:categories(name, parent_id)')
@@ -569,7 +602,8 @@ export function useRecap(month: string | null, today: string) {
         supabase.from('month_plans').select('income, savings, created_at, day_kinds').eq('month', m).maybeSingle(),
         supabase.from('recurring_items').select('id, name, amount, due_day, category_id').eq('active', true),
         supabase.from('day_plans').select('day, kind').gte('day', m).lt('day', end.toISOString().slice(0, 10)),
-        supabase.from('fund_balances').select('name, target, balance'),
+        supabase.from('wallet_balances').select('wallet_id, name, balance, kind, wallet:wallets(target, is_savings)').eq('kind', 'fund'),
+        supabase.from('day_limits').select('day, planned').gte('day', m).lt('day', end.toISOString().slice(0, 10)),
       ])
       const catName = new Map((throwIf(cats) ?? []).map((c) => [c.id as string, c.name as string]))
       const raw = (throwIf(rows) ?? []) as unknown as {
@@ -608,18 +642,27 @@ export function useRecap(month: string | null, today: string) {
           dayKinds: Object.fromEntries((throwIf(days) ?? []).map((d) => [d.day, d.kind as DayKind])),
           weights: weightsOf(dayKindsConfig(p.day_kinds)),
           startDay: vnDate(new Date(p.created_at)),
+          frozen: Object.fromEntries((throwIf(limits) ?? []).map((l) => [l.day as string, Number(l.planned)])),
         })
         // Tháng đã xong: cộng cả kết quả ngày cuối
         surplus = partial ? r.surplus : r.surplus + r.todayLeft
       }
 
+      // Để dành thực tế: chuyển ròng sang ví Tiết kiệm trong tháng
+      const piggy = (throwIf(funds) ?? []).find((f) => (f as unknown as { wallet: { is_savings: boolean } | null }).wallet?.is_savings)
+      const actualSavings = piggy ? await savingsFlow(piggy.wallet_id, m) : 0
+
       return buildRecap({
         month: m,
         today,
+        savings: p ? { planned: Number(p.savings), actual: actualSavings } : null,
         txns,
         prevTotal: (throwIf(prevRows) ?? []).reduce((s, r) => s + Number(r.amount), 0),
         surplus,
-        funds: (throwIf(funds) ?? []).map((f) => ({ name: f.name, balance: Number(f.balance), target: f.target === null ? null : Number(f.target) })),
+        funds: (throwIf(funds) ?? []).map((f) => {
+          const t = (f as unknown as { wallet: { target: number | null } | null }).wallet?.target ?? null
+          return { name: f.name, balance: Number(f.balance), target: t === null ? null : Number(t) }
+        }),
       })
     },
   })
@@ -682,4 +725,84 @@ export function useSaveSettings() {
       throw new Error(error.message)
     }
   }
+}
+
+/**
+ * V14 · Các tháng trước tháng `current` ("YYYY-MM-01") mà người dùng đã dùng Titan (từ tháng có kế hoạch
+ * hoặc giao dịch sớm nhất), mới nhất trước. Kèm cờ tháng đó có lập kế hoạch hay không.
+ */
+export function usePastMonths(current: string) {
+  return useQuery({
+    queryKey: ['plan', 'past-months', current],
+    queryFn: async () => {
+      const [plans, first] = await Promise.all([
+        supabase.from('month_plans').select('month').lt('month', current),
+        supabase.from('transactions').select('occurred_at').is('deleted_at', null).order('occurred_at').limit(1).maybeSingle(),
+      ])
+      const planned = new Set((throwIf(plans) as { month: string }[]).map((p) => p.month))
+      const firstTxn = throwIf(first) as { occurred_at: string } | null
+      const starts = [...planned]
+      if (firstTxn) starts.push(monthStart(firstTxn.occurred_at.slice(0, 10)))
+      if (starts.length === 0) return []
+      const earliest = starts.sort()[0]
+      const months: { month: string; planned: boolean }[] = []
+      for (let m = prevMonth(current); m >= earliest; m = prevMonth(m)) months.push({ month: m, planned: planned.has(m) })
+      return months
+    },
+  })
+}
+
+/** V14 · Tiền vào theo danh mục thu của một tháng (gợi ý nguồn thu nhập khi lập kế hoạch tháng sau) */
+export function useMonthIncome(month: string) {
+  return useQuery({
+    queryKey: ['transactions', 'month-income', month],
+    queryFn: async () => {
+      const { start, end } = monthRange(month)
+      const rows =
+        throwIf(
+          await supabase
+            .from('transactions')
+            .select('amount, category:categories(name)')
+            .is('deleted_at', null)
+            .eq('type', 'income')
+            .eq('status', 'confirmed')
+            .gte('occurred_at', start)
+            .lt('occurred_at', end),
+        ) ?? []
+      const by = new Map<string, number>()
+      for (const r of rows as unknown as { amount: number; category: { name: string } | null }[]) {
+        const name = r.category?.name ?? 'Thu khác'
+        by.set(name, (by.get(name) ?? 0) + Number(r.amount))
+      }
+      return [...by].map(([name, amount]) => ({ name, amount })).sort((a, b) => b.amount - a.amount)
+    },
+  })
+}
+
+/** V14 · Tiền chuyển ròng vào một ví quỹ trong tháng (bỏ vào − rút ra; không tính tiền lãi) */
+export async function savingsFlow(walletId: string, month: string): Promise<number> {
+  const { start, end } = monthRange(month)
+  const rows =
+    throwIf(
+      await supabase
+        .from('transactions')
+        .select('amount, wallet_id, to_wallet_id')
+        .eq('type', 'transfer')
+        .is('deleted_at', null)
+        .or(`wallet_id.eq.${walletId},to_wallet_id.eq.${walletId}`)
+        .gte('occurred_at', start)
+        .lt('occurred_at', end),
+    ) ?? []
+  return rows.reduce((s, r) => s + (r.to_wallet_id === walletId ? Number(r.amount) : -Number(r.amount)), 0)
+}
+
+/** V14 · Tiến độ để dành tháng này: đã chuyển sang ví Tiết kiệm bao nhiêu (null nếu chưa có ví tiết kiệm) */
+export function useSavingsProgress(month: string) {
+  const wallets = useWallets()
+  const piggy = fundsOf(wallets.data).find((f) => f.isSavings && f.accountSuffix)
+  return useQuery({
+    queryKey: ['transactions', 'savings-progress', month, piggy?.id],
+    enabled: !!piggy,
+    queryFn: () => savingsFlow(piggy!.id, month),
+  })
 }

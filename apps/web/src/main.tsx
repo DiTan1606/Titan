@@ -3,6 +3,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { MascotPreview } from './dev/MascotPreview'
 import { lockPageScroll } from './lib/keyboardLock'
 
 // iOS Safari bỏ qua user-scalable=no, nên chặn cử chỉ pinch-zoom trực tiếp
@@ -21,7 +22,7 @@ const queryClient = new QueryClient({
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <App />
+      {import.meta.env.DEV && location.search.includes('preview=mascot') ? <MascotPreview /> : <App />}
     </QueryClientProvider>
   </StrictMode>,
 )

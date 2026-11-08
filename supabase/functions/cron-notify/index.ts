@@ -28,6 +28,25 @@ Deno.serve(async (req) => {
   if (error) return json({ error: error.message }, 500)
   const users = [...new Set((subs ?? []).map((s) => s.user_id as string))]
 
+  // V14-12: chốt hạn mức hôm nay cho mọi người có kế hoạch tháng này (kể cả không bật thông báo).
+  // Chạy mỗi giờ nên lần cuối trong ngày giữ đúng hạn mức của ngày; qua ngày mới số đó thành số chốt.
+  let frozen = 0
+  {
+    let pq = db.from('month_plans').select('user_id').eq('month', monthStart(today))
+    if (body.user_id) pq = pq.eq('user_id', body.user_id)
+    const { data: planned } = await pq
+    for (const { user_id } of planned ?? []) {
+      try {
+        const ctx = await loadPlanContext(db, user_id, today)
+        if (!ctx.result) continue
+        await db.from('day_limits').upsert({ user_id, day: today, planned: Math.max(0, ctx.result.todayLimit), updated_at: new Date().toISOString() })
+        frozen++
+      } catch (err) {
+        console.error(`day_limits user=${String(user_id).slice(0, 8)}`, (err as Error).message)
+      }
+    }
+  }
+
   const report: { user: string; sent: string[] }[] = []
   for (const userId of users) {
     try {
@@ -37,8 +56,8 @@ Deno.serve(async (req) => {
       console.error(`cron-notify user=${userId.slice(0, 8)}`, (err as Error).message)
     }
   }
-  console.log(`cron-notify ${today} ${hour}h users=${users.length} sent=${report.length}`)
-  return json({ today, hour, users: users.length, report })
+  console.log(`cron-notify ${today} ${hour}h users=${users.length} sent=${report.length} frozen=${frozen}`)
+  return json({ today, hour, users: users.length, report, frozen })
 })
 
 async function notifyUser(db: SupabaseClient, userId: string, today: string, hour: number): Promise<string[]> {
@@ -73,7 +92,7 @@ async function loadPlanContext(db: SupabaseClient, userId: string, today: string
   const end = new Date(start)
   end.setMonth(end.getMonth() + 1)
 
-  const [plan, recurring, days, spendRows, pending, budgets] = await Promise.all([
+  const [plan, recurring, days, spendRows, pending, budgets, limits] = await Promise.all([
     db.from('month_plans').select('income, savings, created_at, day_kinds').eq('user_id', userId).eq('month', month).maybeSingle(),
     db.from('recurring_items').select('id, name, amount, due_day, category_id').eq('user_id', userId).eq('active', true),
     db.from('day_plans').select('day, kind').eq('user_id', userId).gte('day', month).lt('day', vnDate(end)),
@@ -92,6 +111,7 @@ async function loadPlanContext(db: SupabaseClient, userId: string, today: string
       .is('deleted_at', null)
       .eq('status', 'pending'),
     db.from('category_budgets').select('amount, category:categories(id, name)').eq('user_id', userId),
+    db.from('day_limits').select('day, planned').eq('user_id', userId).gte('day', month).lt('day', vnDate(end)),
   ])
 
   const spends: Spend[] = ((spendRows.data ?? []) as unknown as {
@@ -122,6 +142,7 @@ async function loadPlanContext(db: SupabaseClient, userId: string, today: string
         dayKinds: Object.fromEntries((days.data ?? []).map((d) => [d.day, d.kind as DayKind])),
         weights: weightsOf(dayKindsConfig(plan.data.day_kinds)),
         startDay: vnDate(new Date(plan.data.created_at)),
+        frozen: Object.fromEntries((limits.data ?? []).map((l) => [l.day as string, Number(l.planned)])),
       })
     : null
 

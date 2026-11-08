@@ -8,7 +8,8 @@ export function flowDirection(txn: Transaction, wallets: Wallet[]): 'out' | 'in'
   if (txn.type === 'income' || txn.type === 'collect') return 'in'
   if (txn.type === 'transfer') {
     const from = wallets.find((w) => w.id === txn.walletId)
-    return from?.kind === 'external' ? 'in' : 'out'
+    // từ tài khoản khác / từ quỹ về VCB là tiền vào ví đang dùng
+    return from?.kind === 'external' || from?.kind === 'fund' ? 'in' : 'out'
   }
   return 'out'
 }
@@ -35,6 +36,15 @@ export function typeOptions(txn: Transaction, wallets: Wallet[]): TypeOption[] {
         hint: 'Không tính là chi tiêu',
         patch: { type: 'transfer', to_wallet_id: external.id, category_id: null },
       })
+    // V14-10: chuyển từ VCB tới tài khoản của một quỹ = bỏ vào quỹ
+    if (source?.kind === 'bank')
+      for (const f of wallets.filter((w) => w.kind === 'fund' && w.accountSuffix))
+        if (!(txn.type === 'transfer' && txn.toWalletId === f.id))
+          options.push({
+            label: `Bỏ vào ${f.name}`,
+            hint: 'Chuyển sang tài khoản của quỹ, không tính là chi tiêu',
+            patch: { type: 'transfer', to_wallet_id: f.id, category_id: null },
+          })
     if (cash && source?.kind === 'bank' && !(txn.type === 'transfer' && txn.toWalletId === cash.id))
       options.push({
         label: 'Rút tiền mặt',
@@ -69,6 +79,14 @@ export function typeOptions(txn: Transaction, wallets: Wallet[]): TypeOption[] {
         hint: 'Không tính là thu nhập',
         patch: { type: 'transfer', wallet_id: external.id, to_wallet_id: receiving.id, category_id: null },
       })
+    if (receiving?.kind === 'bank')
+      for (const f of wallets.filter((w) => w.kind === 'fund' && w.accountSuffix))
+        if (!(txn.type === 'transfer' && txn.walletId === f.id))
+          options.push({
+            label: `Rút từ ${f.name}`,
+            hint: 'Tiền từ tài khoản của quỹ về VCB, không tính là thu nhập',
+            patch: { type: 'transfer', wallet_id: f.id, to_wallet_id: receiving.id, category_id: null },
+          })
     if (txn.type !== 'collect' && receiving)
       options.push({
         label: 'Thu nợ',

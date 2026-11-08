@@ -14,8 +14,8 @@ export const MAX_TEXT_LENGTH = 20_000 // email biên lai dài hơn SMS
 
 const FAIL_HINTS: Record<string, string> = {
   account_suffix_missing: 'Vào Cài đặt nhập 4 số cuối tài khoản VCB để Titan biết tiền ra hay vào.',
-  account_not_matched: 'Biên lai không khớp số tài khoản VCB đã cài. Kiểm tra lại trong tab Tôi.',
-  account_ambiguous: 'Người nhận / người chuyển trùng 4 số cuối tài khoản với bạn. Vào tab Tôi nhập đủ số tài khoản VCB để Titan phân biệt.',
+  account_not_matched: 'Biên lai không khớp số tài khoản VCB đã cài. Kiểm tra lại trong tab Cấu hình.',
+  account_ambiguous: 'Người nhận / người chuyển trùng 4 số cuối tài khoản với bạn. Vào tab Cấu hình nhập đủ số tài khoản VCB để Titan phân biệt.',
 }
 
 export type IngestResult =
@@ -28,7 +28,7 @@ export async function ingestText(db: SupabaseClient, userId: string, text: strin
   // 3. Ví của người dùng (cần 4 số cuối VCB để đọc biên lai)
   const { data: wallets } = await db
     .from('wallets')
-    .select('id, kind, account_suffix, account_hash')
+    .select('id, kind, name, account_suffix, account_hash')
     .eq('user_id', userId)
     .is('archived_at', null)
   const bank = wallets?.find((w) => w.kind === 'bank')
@@ -92,17 +92,23 @@ export async function ingestText(db: SupabaseClient, userId: string, text: strin
   }
 
   // 7. Loại giao dịch (BR-10): rút ATM → chuyển nội bộ VCB → Tiền mặt;
+  //    V14-10: tài khoản bên kia là tài khoản của một quỹ → bỏ vào / rút từ quỹ (tự duyệt);
   //    tự chuyển giữa tài khoản của mình → chuyển nội bộ VCB ⇄ "Tài khoản khác"; tiền vào → thu; còn lại → chi
+  const fund = msg.counterpartyAccount ? await matchFund(userId, msg.counterpartyAccount, wallets ?? []) : null
   const isAtm = msg.isAtm && !!cash
-  const isSelf = msg.isSelfTransfer && !!external
-  const isTransfer = isAtm || isSelf
+  const isSelf = !fund && msg.isSelfTransfer && !!external
+  const isTransfer = isAtm || isSelf || !!fund
   const type = isTransfer ? 'transfer' : msg.sign === '+' ? 'income' : 'expense'
   // Chuyển nội bộ: tiền đi từ wallet_id sang to_wallet_id
-  const [fromWallet, toWallet] = isAtm
-    ? [bank.id, cash!.id]
-    : isSelf
-      ? msg.sign === '-' ? [bank.id, external!.id] : [external!.id, bank.id]
-      : [bank.id, null]
+  const [fromWallet, toWallet] = fund
+    ? msg.sign === '-' ? [bank.id, fund.id] : [fund.id, bank.id]
+    : isAtm
+      ? [bank.id, cash!.id]
+      : isSelf
+        ? msg.sign === '-' ? [bank.id, external!.id] : [external!.id, bank.id]
+        : [bank.id, null]
+  // Phí chuyển khoản (nếu có) không vào quỹ
+  const amount = fund ? msg.transferAmount : msg.amount
 
   // 8. Gợi ý danh mục: ghi nhớ quán → từ điển từ khóa → AI (nếu có key). Chuyển nội bộ không có danh mục.
   const suggestion = isTransfer
@@ -123,13 +129,15 @@ export async function ingestText(db: SupabaseClient, userId: string, text: strin
     .insert({
       user_id: userId,
       type,
-      amount: msg.amount,
+      amount,
       occurred_at: msg.occurredAt ?? new Date().toISOString(),
       wallet_id: fromWallet,
       to_wallet_id: toWallet,
-      status: 'pending',
+      status: fund ? 'confirmed' : 'pending',
       source: 'sms',
-      description: isAtm
+      description: fund
+        ? msg.sign === '-' ? `Bỏ vào ${fund.name}` : `Rút từ ${fund.name}`
+        : isAtm
         ? 'Rút tiền mặt ATM'
         : isSelf
           ? 'Chuyển giữa tài khoản của bạn'
@@ -150,6 +158,11 @@ export async function ingestText(db: SupabaseClient, userId: string, text: strin
   }
 
   // 9. Thông báo: "-35.000đ · Ăn chính? · QUAN COM TAM"
+  if (fund) {
+    const summary = msg.sign === '-' ? `Đã bỏ ${formatVnd(amount)} vào ${fund.name}` : `Đã rút ${formatVnd(amount)} từ ${fund.name} về VCB`
+    await notify(userId, 'Titan · quỹ', summary)
+    return { status: 'created', transaction_id: txn.id, type, summary, balance_warning: balanceWarning }
+  }
   let label = isAtm ? 'Rút tiền mặt' : isSelf ? 'Chuyển giữa tài khoản của bạn' : type === 'income' ? 'Tiền vào' : 'Chi tiêu'
   if (suggestion?.categoryId) {
     const { data: cat } = await db.from('categories').select('name').eq('id', suggestion.categoryId).single()
@@ -160,6 +173,19 @@ export async function ingestText(db: SupabaseClient, userId: string, text: strin
   await notify(userId, 'Titan · giao dịch mới', balanceWarning ? `${summary}\n${balanceWarning}` : summary)
 
   return { status: 'created', transaction_id: txn.id, type, summary, balance_warning: balanceWarning }
+}
+
+/** V14-10 · Tài khoản bên kia của biên lai có phải tài khoản của một quỹ không (so bản băm, chính xác tới từng số) */
+async function matchFund(
+  userId: string,
+  account: string,
+  wallets: { id: string; kind: string; name: string; account_hash: string | null }[],
+): Promise<{ id: string; name: string } | null> {
+  const funds = wallets.filter((w) => w.kind === 'fund' && w.account_hash)
+  if (!funds.length || !/^\d{6,19}$/.test(account)) return null
+  const hash = await sha256Hex(`${userId}:${account}`)
+  const f = funds.find((w) => w.account_hash === hash)
+  return f ? { id: f.id, name: f.name } : null
 }
 
 async function notify(userId: string, title: string, body: string) {

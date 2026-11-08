@@ -13,6 +13,15 @@ export type RecapTxn = {
 
 export type RecapFund = { name: string; balance: number; target: number | null }
 
+/** V14 · Để dành: dự kiến trong kế hoạch so với số đã thật sự chuyển sang ví Tiết kiệm trong tháng */
+export type SavingsResult = { planned: number; actual: number; status: 'over' | 'reached' | 'under' }
+
+export function savingsResult(planned: number, actual: number): SavingsResult {
+  return { planned, actual, status: actual > planned ? 'over' : actual === planned ? 'reached' : 'under' }
+}
+
+export const SAVINGS_LABEL: Record<SavingsResult['status'], string> = { over: 'Vượt dự kiến', reached: 'Đạt dự kiến', under: 'Chưa đạt' }
+
 export type Recap = {
   month: number
   /** tháng chưa kết thúc (recap "tính đến hôm nay") */
@@ -31,6 +40,8 @@ export type Recap = {
   surplus: number | null
   fundsTotal: number
   topFund: RecapFund | null
+  /** null nếu tháng không có kế hoạch hoặc không dự kiến để dành */
+  savings: SavingsResult | null
   verdict: string
 }
 
@@ -43,6 +54,8 @@ export function buildRecap(input: {
   prevTotal: number
   surplus: number | null
   funds: RecapFund[]
+  /** để dành dự kiến (kế hoạch) và thực tế (chuyển ròng sang ví Tiết kiệm trong tháng) */
+  savings?: { planned: number; actual: number } | null
 }): Recap {
   const [y, m] = input.month.split('-').map(Number)
   const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate()
@@ -95,6 +108,7 @@ export function buildRecap(input: {
     surplus: input.surplus,
     fundsTotal,
     topFund: topFund && topFund.balance > 0 ? topFund : null,
+    savings: input.savings && input.savings.planned > 0 ? savingsResult(input.savings.planned, input.savings.actual) : null,
     verdict: verdict(input.surplus, changePct, partial),
   }
 }

@@ -1,4 +1,4 @@
--- Test v1.1: danh mục mặc định mới, sổ tiết kiệm, số dư quỹ, RLS các bảng kế hoạch.
+-- Test v1.1: danh mục mặc định mới, RLS các bảng kế hoạch. (Quỹ chuyển sang ví từ v1.4: xem 014)
 begin;
 
 insert into auth.users (id, email, raw_user_meta_data, aud, role) values
@@ -9,7 +9,7 @@ set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a8","role":"authenticated"}', true);
 
 do $$
-declare n int; ai uuid; fund uuid; bal bigint;
+declare n int; ai uuid;
 begin
   -- Người dùng mới: chỉ danh mục cấp 1 (V11-1), có "AI & phần mềm" và "Khác"
   select count(*) into n from public.categories where parent_id is not null;
@@ -32,17 +32,6 @@ begin
   exception when check_violation then null;
   end;
 
-  -- Sổ tiết kiệm có sẵn, nạp / rút ra số dư đúng
-  select id into fund from public.funds where is_default;
-  assert fund is not null, 'Thiếu Sổ tiết kiệm';
-  insert into public.fund_movements (fund_id, kind, amount) values (fund, 'deposit', 500000), (fund, 'withdraw', 120000);
-  select balance into bal from public.fund_balances where fund_id = fund;
-  assert bal = 380000, format('Số dư quỹ sai: %s', bal);
-
-  -- Mở thêm quỹ
-  insert into public.funds (name, target) values ('MacBook', 30000000);
-  select count(*) into n from public.fund_balances;
-  assert n = 2, format('Phải có 2 quỹ, có %s', n);
 end $$;
 
 -- B không thấy gì của A
@@ -54,8 +43,6 @@ begin
   select count(*) into n from public.month_plans;       assert n = 0, 'B thấy kế hoạch của A';
   select count(*) into n from public.day_plans;         assert n = 0, 'B thấy kiểu ngày của A';
   select count(*) into n from public.category_budgets;  assert n = 0, 'B thấy ngân sách của A';
-  select count(*) into n from public.fund_movements;    assert n = 0, 'B thấy lịch sử quỹ của A';
-  select count(*) into n from public.fund_balances;     assert n = 1, format('B phải chỉ thấy sổ tiết kiệm của mình, thấy %s', n);
 end $$;
 
 select 'OK: 008_v11_planning' as result;

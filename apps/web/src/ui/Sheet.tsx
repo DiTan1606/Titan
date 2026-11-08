@@ -8,6 +8,7 @@ const SHEET = '#ffffff' // nền bảng
 
 // Số bảng đang mở (bảng có thể chồng lên nhau, ví dụ Sửa giao dịch → Đổi loại)
 let openSheets = 0
+const escStack: object[] = []
 
 /**
  * Màu thanh trạng thái (giờ, pin). Ghi cả theme-color lẫn nền html/body vì Safari iOS 26 và app ở màn hình chính
@@ -46,12 +47,16 @@ export function Sheet(props: {
 
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const token = {}
+    escStack.push(token)
+    // Esc chỉ đóng bảng trên cùng (bảng chồng bảng)
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && escStack.at(-1) === token && onClose()
     document.addEventListener('keydown', onKey)
     openSheets++
     setThemeColor(SHEET) // thanh trạng thái (giờ, pin) cùng màu trắng với bảng
     return () => {
       document.removeEventListener('keydown', onKey)
+      escStack.splice(escStack.indexOf(token), 1)
       openSheets--
       if (openSheets === 0) setThemeColor(PAGE)
     }

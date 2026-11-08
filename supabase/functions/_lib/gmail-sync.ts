@@ -61,7 +61,7 @@ export async function syncGmail(db: SupabaseClient, c: Connection): Promise<{ cr
       // Báo một lần: dòng chuyển sang 'revoked' thì cron không gọi lại người này nữa
       await sendPushToUser(db, c.user_id, {
         title: 'Titan mất kết nối Gmail',
-        body: 'Vào tab Tôi bấm "Kết nối lại Gmail" để Titan tiếp tục tự ghi giao dịch VCB.',
+        body: 'Vào tab Cấu hình bấm "Kết nối lại Gmail" để Titan tiếp tục tự ghi giao dịch VCB.',
         url: '/?tab=me',
       }).catch(() => {})
     }

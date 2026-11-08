@@ -100,7 +100,7 @@ begin
   select count(*) into n from public.transactions;
   assert n = 0, format('RLS: B thấy %s giao dịch của A', n);
   select count(*) into n from public.wallet_balances;
-  assert n = 3, format('RLS: B phải chỉ thấy 3 ví của mình, thấy %s', n);
+  assert n = 4, format('RLS: B phải chỉ thấy 4 ví của mình, thấy %s', n);
 end $$;
 
 select 'OK: 002_transactions_balances' as result;

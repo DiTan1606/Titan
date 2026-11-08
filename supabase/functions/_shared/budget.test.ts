@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computePlan, dayKindsConfig, monthDays, type PlanInput, spentByParent } from './budget.ts'
+import { computePlan, dayKindsConfig, kindDef, monthDays, newKindKey, type PlanInput, spentByParent } from './budget.ts'
 
 // Tháng 11/2026 có 30 ngày
 const base: PlanInput = {
@@ -135,13 +135,37 @@ describe('kiểu ngày tùy chỉnh (V13-4)', () => {
     expect(custom.todayLimit).toBe(Math.floor(((def.flexibleBudget * 3) / 32) / 1000) * 1000)
   })
 
-  it('đọc cấu hình: thiếu → mặc định, "Bình thường" luôn 1 và không ẩn, hệ số bị kẹp 0.1–5', () => {
+  it('đọc cấu hình cũ v1.3: thiếu → mặc định, loại "off" bị bỏ, "Bình thường" luôn 1, hệ số bị kẹp 0.1–5', () => {
     const c = dayKindsConfig({ normal: { weight: 9, off: true, label: 'Đi học' }, party: { weight: 99, off: true }, home: { label: '  ' } })
-    expect(c.normal).toEqual({ label: 'Đi học', weight: 1, off: false })
-    expect(c.party).toEqual({ label: 'Tiệc', weight: 5, off: true })
-    expect(c.home.label).toBe('Ở nhà')
-    expect(c.fancy.weight).toBe(1.8)
-    expect(dayKindsConfig(null).home.weight).toBe(0.5)
+    expect(kindDef(c, 'normal')).toMatchObject({ label: 'Đi học', weight: 1 })
+    expect(c.some((k) => k.key === 'party')).toBe(false)
+    expect(kindDef(c, 'home').label).toBe('Ở nhà')
+    expect(kindDef(c, 'fancy').weight).toBe(1.8)
+    expect(kindDef(dayKindsConfig(null), 'home').weight).toBe(0.5)
+  })
+
+  it('cấu hình mới (V14-11): loại tự thêm, icon / màu sai → mặc định, thiếu "Bình thường" thì tự thêm', () => {
+    const c = dayKindsConfig({
+      v: 2,
+      kinds: [
+        { key: 'k1', label: 'Hẹn hò', weight: 2.04, icon: 'heart', color: '#E24B4A' },
+        { key: 'k2', label: 'Ngày thi', weight: 0.7, icon: 'khong-co', color: 'red' },
+        { key: 'Sai Khóa', label: 'x', weight: 1 },
+        { key: 'k1', label: 'trùng', weight: 1 },
+      ],
+    })
+    expect(c.map((k) => k.key)).toEqual(['normal', 'k1', 'k2'])
+    expect(kindDef(c, 'k1')).toEqual({ key: 'k1', label: 'Hẹn hò', weight: 2, icon: 'heart', color: '#E24B4A' })
+    expect(kindDef(c, 'k2')).toMatchObject({ icon: 'smile', color: '#888780' })
+    expect(kindDef(c, 'party').key).toBe('normal') // loại đã xóa → bình thường
+    expect(newKindKey(c)).toBe('k3')
+  })
+
+  it('ngày gắn loại đã xóa tính như ngày bình thường', () => {
+    const kinds = { '2026-11-01': 'k9' }
+    const normal = computePlan({ ...base, weights: { normal: 1 } })
+    const deleted = computePlan({ ...base, dayKinds: kinds, weights: { normal: 1 } })
+    expect(deleted.todayLimit).toBe(normal.todayLimit)
   })
 })
 
@@ -152,5 +176,34 @@ describe('spentByParent', () => {
       { date: 'd', amount: 5, categoryId: 'food', parentId: null },
     ])
     expect(m.get('food')).toBe(15)
+  })
+})
+
+describe('chốt hạn mức ngày đã qua (V14-12)', () => {
+  // Tháng 11 có 30 ngày, tiền linh hoạt 3.000.000đ, 10 ngày đầu tiêu đúng 100.000đ/ngày
+  const spends = Array.from({ length: 10 }, (_, i) => ({ date: `2026-11-${String(i + 1).padStart(2, '0')}`, amount: 100_000, categoryId: null, parentId: null }))
+  const input: PlanInput = { today: '2026-11-11', income: 3_000_000, savings: 0, fixed: [], spends, dayKinds: {}, startDay: '2026-11-01' }
+
+  it('không chốt: đổi một ngày tương lai sang ×2 làm ngày cũ bị tính lại, báo vượt mức oan', () => {
+    const r = computePlan({ ...input, dayKinds: { '2026-11-20': 'party' }, weights: { normal: 1, party: 2 } })
+    expect(r.days[0].planned).toBeLessThan(100_000)
+    expect(r.surplus).toBeLessThan(0)
+  })
+
+  it('có chốt: ngày cũ giữ đúng hạn mức đã chốt, hũ dư không đổi; hôm nay và sau đó chia lại', () => {
+    const frozen = Object.fromEntries(spends.map((s) => [s.date, 100_000]))
+    const before = computePlan({ ...input, frozen })
+    const after = computePlan({ ...input, frozen, dayKinds: { '2026-11-20': 'party' }, weights: { normal: 1, party: 2 } })
+    expect(after.days.slice(0, 10).map((d) => d.planned)).toEqual(Array(10).fill(100_000))
+    expect(after.surplus).toBe(0)
+    expect(after.surplus).toBe(before.surplus)
+    // 2.000.000đ còn lại chia cho 20 ngày, ngày 20 hệ số 2 → 21 phần
+    expect(after.todayLimit).toBe(95_000)
+    expect(after.days.find((d) => d.date === '2026-11-20')!.planned).toBe(190_000)
+  })
+
+  it('hôm nay không bị khóa dù đã có số chốt', () => {
+    const r = computePlan({ ...input, frozen: { '2026-11-11': 1 } })
+    expect(r.todayLimit).toBe(100_000)
   })
 })

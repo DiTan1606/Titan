@@ -94,6 +94,19 @@ html {
 body {
   @apply bg-ink-50 font-sans text-ink-900 antialiased;
   -webkit-tap-highlight-color: transparent;
+  /* Như app thật: không bôi đen chữ, không hiện menu khi nhấn giữ (iPhone) */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Ô nhập vẫn chọn / dán chữ được */
+input,
+textarea,
+[contenteditable='true'] {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 /* Số tiền: chữ số đều chiều rộng để không "nhảy" khi đếm */

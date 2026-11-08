@@ -1,15 +1,12 @@
-import { useQueryClient } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import { motion } from 'motion/react'
 import { useEffect, useState } from 'react'
-import type { Recap } from '@shared/recap.ts'
-import { useFunds, useRecap } from '../../lib/data'
+import { type Recap, SAVINGS_LABEL } from '@shared/recap.ts'
+import { fundsOf, useRecap, useWallets } from '../../lib/data'
+import { fundAccountLabel } from '../../lib/funds'
 import { formatVnd } from '../../lib/format'
-import { supabase } from '../../lib/supabase'
 import { useVnDays } from '../../lib/useVnDays'
 import { AnimatedVnd } from '../../ui/AnimatedNumber'
-import { Button } from '../../ui/Button'
-import { useToast } from '../../ui/toast-context'
 
 type Page = { bg: string; render: () => React.ReactNode }
 
@@ -211,6 +208,23 @@ function buildPages(r: Recap): Page[] {
     })
   }
 
+  if (r.savings) {
+    const sv = r.savings
+    pages.push({
+      bg: sv.status === 'under' ? '#854F0B' : '#993556',
+      render: () => (
+        <>
+          <Kicker>Để dành {r.partial ? 'tới giờ' : 'cả tháng'}</Kicker>
+          <Big>{formatVnd(Math.max(0, sv.actual))}</Big>
+          <Note>
+            Dự kiến {formatVnd(sv.planned)} · {SAVINGS_LABEL[sv.status]}
+            {sv.status === 'under' && !r.partial ? '. Tháng sau gỡ lại nha.' : sv.status === 'over' ? '. Quá đỉnh!' : ''}
+          </Note>
+        </>
+      ),
+    })
+  }
+
   if (r.topFund)
     pages.push({
       bg: '#185FA5',
@@ -233,38 +247,32 @@ function buildPages(r: Recap): Page[] {
   return pages
 }
 
-/** Trang cuối: câu chốt + P10 bỏ hũ dư vào quỹ (chỉ khi tháng đã xong và hũ dương) */
+/**
+ * Trang cuối: câu chốt + P10 hũ dư. V14-10: quỹ là tài khoản thật nên chỉ nhắc chuyển tiền,
+ * Titan đọc biên lai VCB và tự cộng vào quỹ.
+ */
 function Finale({ r }: { r: Recap }) {
-  const funds = useFunds()
-  const qc = useQueryClient()
-  const toast = useToast()
-  const [saved, setSaved] = useState(false)
-  const canSave = !r.partial && (r.surplus ?? 0) > 0 && !saved
-
-  async function save(fundId: string, name: string) {
-    const { error } = await supabase
-      .from('fund_movements')
-      .insert({ fund_id: fundId, kind: 'deposit', amount: r.surplus!, note: `Hũ dư tháng ${r.month}` })
-    if (error) return toast(error.message, { tone: 'error' })
-    setSaved(true)
-    await qc.invalidateQueries({ queryKey: ['funds'] })
-    toast(`Đã bỏ ${formatVnd(r.surplus!)} vào ${name}`, { tone: 'success' })
-  }
+  const wallets = useWallets()
+  const funds = fundsOf(wallets.data).filter((f) => f.accountSuffix)
+  const show = !r.partial && (r.surplus ?? 0) > 0
 
   return (
     <>
       <p className="text-3xl leading-tight font-extrabold">{r.verdict}</p>
-      {canSave && (
+      {show && (
         <div className="mt-6 flex flex-col gap-2">
-          <p className="text-sm font-bold opacity-85">Bỏ hũ dư {formatVnd(r.surplus!)} vào:</p>
-          {(funds.data ?? []).map((f) => (
-            <Button key={f.id} full className="border-brand-200 bg-white text-brand-600" onClick={() => save(f.id, f.name)}>
-              {f.name}
-            </Button>
-          ))}
+          <p className="text-sm font-bold opacity-85">Hũ dư {formatVnd(r.surplus!)} nè. Chuyển từ VCB sang quỹ để cất đi:</p>
+          {funds.length ? (
+            funds.map((f) => (
+              <p key={f.id} className="rounded-2xl bg-white/15 px-4 py-2.5 font-bold">
+                {f.name} · {fundAccountLabel(f)}
+              </p>
+            ))
+          ) : (
+            <Note>Gắn tài khoản cho Tiết kiệm ở Trang chủ để cất hũ dư nhé.</Note>
+          )}
         </div>
       )}
-      {saved && <Note>Đã cất vào quỹ</Note>}
     </>
   )
 }

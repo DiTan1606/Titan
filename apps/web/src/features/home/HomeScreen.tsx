@@ -1,8 +1,10 @@
-import { CalendarRange, Landmark, MoonStar, Wallet } from 'lucide-react'
+import { CalendarRange, Landmark, MoonStar, PiggyBank, Plus, Target, Wallet } from 'lucide-react'
 import { motion } from 'motion/react'
 import { useState } from 'react'
 import type { DayKind } from '@shared/budget.ts'
-import { nicknameOf, usePendingCount, usePlan, useProfile, useSpendingStats, useWallets } from '../../lib/data'
+import { fundsOf, nicknameOf, usePendingCount, usePlan, useProfile, useSpendingStats, useWallets } from '../../lib/data'
+import { NewFundSheet } from '../funds/FundSheets'
+import { FundTab } from './FundTab'
 import { homeMessage } from '../../lib/homeMessage'
 import { useVnDays } from '../../lib/useVnDays'
 import { AnimatedVnd } from '../../ui/AnimatedNumber'
@@ -23,6 +25,8 @@ const rise = (i: number) => ({
 })
 
 type WalletTab = 'bank' | 'cash'
+/** Tab đang chọn: ví VCB, tiền mặt, hoặc id của một quỹ */
+type HomeTab = WalletTab | string
 
 /**
  * Trang chủ v1.3 (V13-1): cố định một màn, không cuộn.
@@ -36,7 +40,10 @@ export function HomeScreen(props: { onOpenPlan: () => void; onOpenDigest: () => 
   const [hour] = useState(vnHour)
   const { today } = useVnDays()
   const { ready: planReady, result: plan, dayKinds, kinds, month } = usePlan(today)
-  const [tab, setTab] = useState<WalletTab>('bank')
+  const [tab, setTab] = useState<HomeTab>('bank')
+  const [creatingFund, setCreatingFund] = useState(false)
+  const funds = fundsOf(wallets.data)
+  const fund = funds.find((f) => f.id === tab)
   const todayKind: DayKind = dayKinds[today] ?? 'normal'
 
   const nickname = nicknameOf(profile.data)
@@ -99,17 +106,39 @@ export function HomeScreen(props: { onOpenPlan: () => void; onOpenDigest: () => 
       </div>
 
       <motion.section {...rise(2)} className="card flex min-h-0 flex-1 flex-col p-2.5">
-        <div className="grid shrink-0 grid-cols-2 gap-1 rounded-2xl bg-ink-100 p-1">
+        {/* V14: trượt ngang, vừa đủ 2 tab một lúc: VCB · Tiền mặt · Tiết kiệm · các quỹ · + */}
+        <div className="flex shrink-0 snap-x snap-mandatory scroll-px-1 gap-1 overflow-x-auto rounded-2xl bg-ink-100 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <TabButton active={tab === 'bank'} onClick={() => setTab('bank')} icon={<Landmark size={18} strokeWidth={2.4} />} label="VCB" amount={bank?.balance} badge={pending.data} />
           <TabButton active={tab === 'cash'} onClick={() => setTab('cash')} icon={<Wallet size={18} strokeWidth={2.4} />} label="Tiền mặt" amount={cash?.balance} />
+          {funds.map((f) => (
+            <TabButton
+              key={f.id}
+              active={tab === f.id}
+              onClick={() => setTab(f.id)}
+              icon={f.isSavings ? <PiggyBank size={18} strokeWidth={2.4} /> : <Target size={18} strokeWidth={2.4} />}
+              label={f.name}
+              amount={f.balance}
+            />
+          ))}
+          <button
+            type="button"
+            aria-label="Mở quỹ mới"
+            onClick={() => setCreatingFund(true)}
+            className="flex w-[calc(50%-0.125rem)] shrink-0 snap-start items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-ink-300 text-sm font-extrabold text-ink-500 active:bg-white/60"
+          >
+            <Plus size={18} strokeWidth={2.8} /> Mở quỹ
+          </button>
         </div>
         <div className="flex min-h-0 flex-1 flex-col pt-2.5">
           {tab === 'bank' ? (
             <VcbTab wallet={bank} onAdd={(t) => props.onAdd('bank', t)} />
-          ) : (
+          ) : tab === 'cash' ? (
             <CashTab wallet={cash} onAdd={(t) => props.onAdd('cash', t)} />
-          )}
+          ) : fund ? (
+            <FundTab key={fund.id} fund={fund} />
+          ) : null}
         </div>
+        <NewFundSheet open={creatingFund} onClose={() => setCreatingFund(false)} onCreated={setTab} />
       </motion.section>
     </div>
   )
@@ -121,13 +150,13 @@ function TabButton(props: { active: boolean; onClick: () => void; icon: React.Re
       type="button"
       onClick={props.onClick}
       aria-pressed={props.active}
-      className={`relative flex flex-col items-start rounded-xl px-3 py-1.5 text-left transition-colors ${
+      className={`relative flex w-[calc(50%-0.125rem)] shrink-0 snap-start flex-col items-start rounded-xl px-3 py-1.5 text-left transition-colors ${
         props.active ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500'
       }`}
     >
       <span className={`flex items-center gap-1.5 text-xs font-bold ${props.active ? 'text-brand-500' : ''}`}>
         {props.icon}
-        {props.label}
+        <span className="truncate">{props.label}</span>
       </span>
       <AnimatedVnd value={props.amount ?? 0} className="text-[17px] leading-tight font-extrabold" />
       {!!props.badge && (

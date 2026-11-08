@@ -1,16 +1,17 @@
-import { CalendarRange, House, type LucideIcon, ReceiptText, UserRound } from 'lucide-react'
+import { CalendarRange, House, type LucideIcon, ReceiptText, Settings, UserRound } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 
-export type Tab = 'home' | 'transactions' | 'plan' | 'me'
+export type Tab = 'home' | 'transactions' | 'plan' | 'settings' | 'profile'
 
 const TABS: { id: Tab; label: string; Icon: LucideIcon }[] = [
   { id: 'home', label: 'Trang chủ', Icon: House },
   { id: 'transactions', label: 'Giao dịch', Icon: ReceiptText },
   { id: 'plan', label: 'Kế hoạch', Icon: CalendarRange },
-  { id: 'me', label: 'Tôi', Icon: UserRound },
+  { id: 'settings', label: 'Cấu hình', Icon: Settings },
+  { id: 'profile', label: 'Profile', Icon: UserRound },
 ]
 
-/** Thanh tab dưới cùng: chỉ icon (V13-1). Ghi nhanh đã nằm trong Trang chủ. */
+/** Thanh tab dưới cùng: chỉ icon (V13-1). V14: 5 tab Trang chủ · Giao dịch · Kế hoạch · Cấu hình · Profile. */
 export function TabBar(props: { tab: Tab; onTab: (t: Tab) => void; homeBadge?: number }) {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t-2 border-ink-100 bg-white pb-[env(safe-area-inset-bottom)]">
@@ -29,7 +30,7 @@ export function TabBar(props: { tab: Tab; onTab: (t: Tab) => void; homeBadge?: n
               {active && (
                 <motion.span
                   layoutId="tab-pill"
-                  className="absolute h-10 w-16 rounded-full bg-brand-50"
+                  className="absolute h-10 w-14 rounded-full bg-brand-50"
                   transition={{ type: 'spring', damping: 26, stiffness: 400 }}
                 />
               )}

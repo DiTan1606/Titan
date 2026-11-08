@@ -21,6 +21,10 @@ export type IncomingMessage = {
   isAtm: boolean
   /** người chuyển và người hưởng là cùng một người → chuyển giữa tài khoản của chính mình */
   isSelfTransfer: boolean
+  /** V14-10 · số tài khoản bên kia (người hưởng khi tiền ra, người chuyển khi tiền vào) — chỉ biên lai email có */
+  counterpartyAccount: string | null
+  /** số tiền chuyển, chưa gồm phí (để ghi vào quỹ đúng số tiền quỹ nhận) */
+  transferAmount: number
 }
 
 export type IncomingResult = {
@@ -66,6 +70,8 @@ export function parseIncoming(text: string, account: MyAccount | string | null):
         counterparty,
         isAtm: false,
         isSelfTransfer,
+        counterpartyAccount: dir.counterpartyAccount || null,
+        transferAmount: receipt.amount,
       },
     }
   }
@@ -88,6 +94,8 @@ export function parseIncoming(text: string, account: MyAccount | string | null):
       counterparty: null,
       isAtm: isAtmWithdrawal(p),
       isSelfTransfer: false,
+      counterpartyAccount: null,
+      transferAmount: p.amount,
     },
   }
 }

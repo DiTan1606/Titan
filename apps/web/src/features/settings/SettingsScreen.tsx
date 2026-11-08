@@ -1,54 +1,53 @@
-import { LogOut, Pencil } from 'lucide-react'
-import { useState } from 'react'
-import { nicknameOf, useProfile } from '../../lib/data'
-import { supabase } from '../../lib/supabase'
-import { Button } from '../../ui/Button'
 import { PushTestCard } from '../push/PushTestCard'
-import { AutoSyncCard } from './AutoSyncCard'
 import { CategoriesCard } from './CategoriesCard'
-import { NicknameSheet } from './NicknameSheet'
+import { DayKindsCard } from './DayKindsCard'
+import { BankAccountCard, GmailCard } from './ConnectionCards'
 import { RemindersCard } from './RemindersCard'
 import { TrashCard } from './TrashCard'
 
-// Tab "Tôi": hồ sơ + thông báo + kết nối Gmail + thùng rác
+/** V14 · Tab Cấu hình: thông báo, nhắc nhở, Gmail, số tài khoản, danh mục, thùng rác, phiên bản */
 export function SettingsScreen() {
-  const profile = useProfile()
-  const name = profile.data?.display_name ?? ''
-  const nickname = nicknameOf(profile.data)
-  const initial = (nickname ?? name.split(' ').at(-1))?.[0] ?? 'T'
-  const [naming, setNaming] = useState(false)
-
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex items-center gap-4 pt-2">
-        <span className="grid size-16 place-items-center rounded-[1.4rem] border-b-4 border-brand-600 bg-brand-400 text-2xl font-extrabold text-white">
-          {initial}
-        </span>
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight">{name}</h1>
-          <p className="text-sm font-semibold text-ink-500">Titan 1.3.4</p>
-        </div>
-      </header>
+      <h1 className="pt-2 text-3xl font-extrabold tracking-tight">Cấu hình</h1>
 
-      {/* V13-2 · Biệt danh hiện ở lời chào Trang chủ */}
-      <button type="button" onClick={() => setNaming(true)} className="card flex items-center gap-3 p-4 text-left active:scale-[0.99]">
-        <span className="flex-1">
-          <span className="block text-sm font-bold text-ink-500">Biệt danh</span>
-          <span className="block text-lg font-extrabold">{nickname ?? 'Chưa đặt'}</span>
-        </span>
-        <Pencil size={18} className="text-ink-400" />
-      </button>
-      <NicknameSheet open={naming} current={nickname} onClose={() => setNaming(false)} />
+      <Group title="Thông báo">
+        <PushTestCard />
+        <RemindersCard />
+      </Group>
 
-      <PushTestCard />
-      <RemindersCard />
-      <AutoSyncCard />
-      <CategoriesCard />
-      <TrashCard />
+      <Group title="Ngân hàng">
+        <GmailCard />
+        <BankAccountCard />
+      </Group>
 
-      <Button variant="danger" full icon={<LogOut size={18} />} onClick={() => supabase.auth.signOut()}>
-        Đăng xuất
-      </Button>
+      <Group title="Chi tiêu">
+        <DayKindsCard />
+        <CategoriesCard />
+        <TrashCard />
+      </Group>
+
+      <Group title="Ứng dụng">
+        <section className="card flex items-center gap-3 p-4">
+          <img src="/icon-192.png" alt="" className="size-11 rounded-2xl" />
+          <div className="min-w-0 flex-1">
+            <h2 className="font-extrabold">Phiên bản</h2>
+            <a href="/privacy.html" className="text-sm text-ink-500 underline">
+              Quyền riêng tư
+            </a>
+          </div>
+          <span className="rounded-xl bg-brand-50 px-3 py-1 text-sm font-extrabold text-brand-600">Titan 1.4.0</span>
+        </section>
+      </Group>
     </div>
+  )
+}
+
+function Group(props: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="flex flex-col gap-2">
+      <h2 className="px-1 text-xs font-extrabold tracking-wide text-ink-400 uppercase">{props.title}</h2>
+      {props.children}
+    </section>
   )
 }

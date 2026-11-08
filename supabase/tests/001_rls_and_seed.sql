@@ -13,7 +13,7 @@ declare n int;
 begin
   -- Trigger đã tạo profile, 3 ví (VCB, Tiền mặt, Tài khoản khác), danh mục
   select count(*) into n from public.wallets where user_id = '00000000-0000-0000-0000-00000000000a';
-  assert n = 3, format('Mong đợi 3 ví, nhận %s', n);
+  assert n = 4, format('Mong đợi 4 ví (VCB, tiền mặt, tài khoản khác, Tiết kiệm), nhận %s', n);
 
   select count(*) into n from public.categories
    where user_id = '00000000-0000-0000-0000-00000000000a' and system_key = 'unknown';
@@ -32,7 +32,7 @@ do $$
 declare n int;
 begin
   select count(*) into n from public.wallets;
-  assert n = 3, format('RLS: A phải chỉ thấy 3 ví của mình, thấy %s', n);
+  assert n = 4, format('RLS: A phải chỉ thấy 4 ví của mình, thấy %s', n);
 
   select count(*) into n from public.profiles;
   assert n = 1, format('RLS: A phải chỉ thấy 1 profile, thấy %s', n);
