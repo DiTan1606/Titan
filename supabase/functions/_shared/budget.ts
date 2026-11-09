@@ -345,10 +345,15 @@ function cashCap(
   return best
 }
 
-/** Ngân sách danh mục cấp 1: đã chi bao nhiêu trong tháng */
-export function spentByParent(spends: Spend[]): Map<string, number> {
+/**
+ * Ngân sách danh mục cấp 1: đã chi linh hoạt bao nhiêu trong tháng.
+ * V16 · Bỏ các giao dịch thuộc danh mục của khoản cố định (đã có thanh tiến độ riêng), ví dụ Xăng trong Đi lại.
+ */
+export function spentByParent(spends: Spend[], fixedCategoryIds: Iterable<string | null> = []): Map<string, number> {
+  const fixed = new Set([...fixedCategoryIds].filter((c): c is string => !!c))
   const m = new Map<string, number>()
   for (const s of spends) {
+    if (s.categoryId && fixed.has(s.categoryId)) continue
     const key = s.parentId ?? s.categoryId
     if (key) m.set(key, (m.get(key) ?? 0) + s.amount)
   }

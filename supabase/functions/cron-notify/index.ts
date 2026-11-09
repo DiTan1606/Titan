@@ -154,7 +154,7 @@ async function loadPlanContext(db: SupabaseClient, userId: string, today: string
     .filter((f) => (f.type === 'expense' || f.type === 'borrow') && f.source !== 'reconcile')
     .map((f) => ({ date: f.date, amount: f.amount, categoryId: f.categoryId, parentId: f.parentId }))
 
-  const byParent = spentByParent(spends)
+  const byParent = spentByParent(spends, (recurring.data ?? []).map((r) => r.category_id as string | null))
   const overBudget = ((budgets.data ?? []) as unknown as { amount: number; category: { id: string; name: string } | null }[])
     .filter((b) => b.category && (byParent.get(b.category.id) ?? 0) > Number(b.amount))
     .map((b) => b.category!.name)

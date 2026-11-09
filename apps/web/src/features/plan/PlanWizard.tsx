@@ -207,7 +207,10 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
   const flexible = preview.flexibleBudget
   const unit = preview.todayLimit / kindDef(kinds, kindOf(today)).weight
 
-  const lastByParent = useMemo(() => spentByParent(lastSpends.data ?? []), [lastSpends.data])
+  const lastByParent = useMemo(
+    () => spentByParent(lastSpends.data ?? [], (recurring.data ?? []).map((r) => r.categoryId)),
+    [lastSpends.data, recurring.data],
+  )
   const budgetCats = cats.filter((c) => c.kind === 'expense' && !c.parentId && c.systemKey !== 'unknown' && !c.hidden)
 
   const valid: Record<Step, boolean> = {

@@ -66,7 +66,7 @@ export function MonthPlanDetail() {
     }
   }
 
-  const byParent = spentByParent(spends)
+  const byParent = spentByParent(spends, activeFixed.map((r) => r.categoryId))
   const budgetRows = cats
     .filter((c) => c.kind === 'expense' && !c.parentId && c.systemKey !== 'unknown')
     .map((c) => ({ category: c, spent: byParent.get(c.id) ?? 0, budget: budgets.data?.get(c.id) ?? null }))

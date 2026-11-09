@@ -235,3 +235,15 @@ describe('chốt hạn mức ngày đã qua (V14-12)', () => {
     expect(r.todayLimit).toBe(100_000)
   })
 })
+
+describe('spentByParent – ngân sách danh mục (V16)', () => {
+  it('chỉ tính chi linh hoạt, bỏ tiền của khoản cố định trong cùng danh mục', () => {
+    const spends = [
+      { date: '2026-11-10', amount: 70_000, categoryId: 'fuel', parentId: 'transport' },
+      { date: '2026-11-10', amount: 40_000, categoryId: 'grab', parentId: 'transport' },
+      { date: '2026-11-10', amount: 25_000, categoryId: 'transport', parentId: null },
+    ]
+    expect(spentByParent(spends).get('transport')).toBe(135_000)
+    expect(spentByParent(spends, ['fuel', null]).get('transport')).toBe(65_000)
+  })
+})
