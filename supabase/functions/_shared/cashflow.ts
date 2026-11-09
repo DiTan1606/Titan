@@ -111,6 +111,8 @@ export type MonthActual = {
    * số dư − tiền đệm − khoản cố định chưa trả tới hạn trước đó (− tiết kiệm còn chuyển nếu tính tới cuối tháng)
    */
   canSpend: number
+  /** các phần đã trừ khỏi số dư để ra canSpend (để vẽ thanh giải thích) */
+  canSpendParts: { buffer: number; fixed: number; savings: number; unallocated: number }
   canSpendUntil: string | null
   /** có nguồn thu đã qua ngày hẹn mà chưa về */
   incomeLate: boolean
@@ -234,6 +236,7 @@ export function monthPlan(args: {
       other: args.balance - known,
       balance: args.balance,
       canSpend: args.balance - args.buffer - fixedUnpaid - (nextIncome ? 0 : savingsLeft) - unallocated,
+      canSpendParts: { buffer: args.buffer, fixed: fixedUnpaid, savings: nextIncome ? 0 : savingsLeft, unallocated },
       canSpendUntil: nextIncome,
       incomeLate,
       sources: matched.sources,

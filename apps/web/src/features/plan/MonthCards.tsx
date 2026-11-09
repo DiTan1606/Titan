@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { Check, Pencil } from 'lucide-react'
+import { Check, ChevronDown, Pencil } from 'lucide-react'
 import { useState } from 'react'
 import type { MonthActual } from '@shared/cashflow.ts'
 import type { PlanResult } from '@shared/budget.ts'
@@ -17,23 +17,55 @@ const waitingNames = (a: MonthActual, day: string) =>
 
 const dm = (d: string) => `${Number(d.slice(8))}/${Number(d.slice(5, 7))}`
 
+/** "1.435k", "805k" cho chú thích gọn */
+const k = (n: number) => `${n < 0 ? '−' : ''}${Math.round(Math.abs(n) / 1000).toLocaleString('vi-VN')}k`
+const daysBetween = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000)
+
 /**
- * V16 · Thẻ tháng: Dự kiến (kế hoạch) và Thực tế (theo giao dịch, thời gian thực).
- * Thực tế cân về đúng số dư VCB + tiền mặt app đang tính → người dùng so với số dư thật để đối soát.
+ * V16 · Thẻ tháng (linh hồn của kế hoạch), 4 phần:
+ * 1. Mỗi ngày được tiêu: kế hoạch cho bao nhiêu và thực tế hôm nay bao nhiêu (bị bóp thì nói vì sao).
+ * 2. Vì sao: thanh tiền đang có, tách phần phải giữ (đệm, khoản cố định tới hạn, tiết kiệm…) và phần tiêu được tới đợt tiền về.
+ * 3. Kế hoạch so với thực tế: nguồn thu, khoản cố định, tiết kiệm, chi linh hoạt (thanh tiến độ).
+ * 4. Đối soát số dư (gập lại): từng khoản cộng trừ ra đúng số dư VCB + tiền mặt.
  */
-export function MonthCard(props: {
-  month: string
-  result: PlanResult
-  actual: MonthActual
-  onEdit: () => void
-}) {
-  const { actual: a, result: r, month } = props
+export function MonthCard(props: { month: string; today: string; result: PlanResult; actual: MonthActual; onEdit: () => void }) {
+  const { actual: a, result: r, month, today } = props
   const wallets = useWallets()
+  const [ledger, setLedger] = useState(false)
   const bank = wallets.data?.find((w) => w.kind === 'bank')?.balance ?? 0
   const cash = wallets.data?.find((w) => w.kind === 'cash')?.balance ?? 0
   const fromStart = a.startDay > month
   const openingLabel = fromStart ? `Số dư ngày ${dm(a.startDay)}` : 'Dư tháng trước'
-  const sourcesDone = a.sources.filter((s) => s.done).length
+
+  const planDay = r.cashLimit ? r.cashLimit.planLimit : r.todayLimit
+  const squeezed = !!r.cashLimit
+  const until = a.canSpendUntil
+  const spanDays = until ? Math.max(1, daysBetween(today, until)) : r.daysLeft
+  const perDay = Math.max(0, a.canSpend) / Math.max(1, spanDays)
+  const waiting = until ? waitingNames(a, until) : ''
+  const reason = a.incomeLate
+    ? `${waitingNames(a, today) === 'tiền' ? 'Tiền' : 'Có khoản thu'} trễ hẹn chưa về`
+    : squeezed
+      ? until
+        ? `Bóp tới ngày ${Number(until.slice(8))}, lúc ${waiting} về`
+        : 'Bóp vì tiền thật không đủ tới cuối tháng'
+      : 'Đủ tiền, đúng kế hoạch'
+
+  // thanh "tiền đang có": phần phải giữ + phần tiêu được
+  const parts = [
+    { key: 'spend', label: until ? `Tiêu được tới ngày ${Number(until.slice(8))}` : 'Tiêu được tới cuối tháng', value: Math.max(0, a.canSpend), color: '#1D9E75' },
+    { key: 'fixed', label: until ? `Khoản cố định tới hạn trước ngày ${Number(until.slice(8))}` : 'Khoản cố định chưa trả', value: a.canSpendParts.fixed, color: '#D85A30' },
+    { key: 'savings', label: 'Tiết kiệm còn phải chuyển', value: a.canSpendParts.savings, color: '#D4537E' },
+    { key: 'extra', label: 'Tiền dư chưa phân bổ', value: a.canSpendParts.unallocated, color: '#BA7517' },
+    { key: 'buffer', label: 'Tiền đệm', value: a.canSpendParts.buffer, color: '#888780' },
+  ].filter((p) => p.value > 0)
+  const barTotal = parts.reduce((s, p) => s + p.value, 0) || 1
+
+  const changes = [
+    a.changes.fixed !== 0 && `${a.changes.fixed > 0 ? 'cố định tốn ít hơn' : 'cố định tốn hơn'} ${a.changes.fixed > 0 ? '+' : ''}${k(a.changes.fixed)}`,
+    a.changes.income !== 0 && `thu ${a.changes.income < 0 ? 'thiếu' : 'thêm'} ${a.changes.income > 0 ? '+' : ''}${k(a.changes.income)}`,
+    a.changes.extra !== 0 && `tiền dư đưa vào tiêu +${k(a.changes.extra)}`,
+  ].filter(Boolean) as string[]
 
   return (
     <section className="card p-4">
@@ -51,64 +83,125 @@ export function MonthCard(props: {
         </button>
       </div>
 
-      <h3 className="mt-3 text-xs font-extrabold tracking-wide text-ink-400 uppercase">Dự kiến</h3>
-      <dl className="mt-1 text-sm">
-        {a.expected.opening !== 0 && <Row label={openingLabel} value={a.expected.opening} />}
-        {a.expected.buffer > 0 && <Row label="Tiền đệm (không tiêu)" value={-a.expected.buffer} />}
-        <Row label="Nguồn thu" value={a.expected.income} />
-        <Row label="Khoản cố định" value={-a.expected.fixed} />
-        <Row label="Tiết kiệm" value={-a.expected.savings} />
-        <Row label="Tiền linh hoạt" value={a.expected.flexible} strong />
-      </dl>
-      {a.flexibleNow !== a.expected.flexible && (
-        <dl className="mt-2 rounded-2xl bg-ink-50 px-3 py-2 text-sm">
-          {a.changes.fixed !== 0 && <Row label={a.changes.fixed > 0 ? 'Khoản cố định tốn ít hơn' : 'Khoản cố định tốn nhiều hơn'} value={a.changes.fixed} />}
-          {a.changes.income !== 0 && <Row label={a.changes.income < 0 ? 'Nguồn thu nhận thiếu' : 'Nguồn thu'} value={a.changes.income} />}
-          {a.changes.extra !== 0 && <Row label="Tiền dư đưa vào tiêu" value={a.changes.extra} />}
-          <Row label="Tiền linh hoạt bây giờ" value={a.flexibleNow} strong />
-        </dl>
-      )}
-      <Bar value={r.flexibleSpent} max={Math.max(r.flexibleBudget, 1)} />
-      <p className="mt-1.5 text-xs font-semibold text-ink-500">
-        Đã chi linh hoạt {formatVnd(r.flexibleSpent)} - còn {formatVnd(Math.max(0, r.flexibleBudget - r.flexibleSpent))} cho {r.daysLeft} ngày
-      </p>
-
-      <h3 className="mt-4 text-xs font-extrabold tracking-wide text-ink-400 uppercase">Thực tế</h3>
-      <dl className="mt-1 text-sm">
-        <Row label={openingLabel} value={a.opening} />
-        <Row label={a.sources.length ? `Nguồn thu đã nhận (${sourcesDone}/${a.sources.length} đã chốt)` : 'Nguồn thu đã nhận'} value={a.received} />
-        {a.unexpected > 0 && <Row label="Thu ngoài dự kiến" value={a.unexpected} />}
-        <Row label="Cố định đã trả" value={-a.fixedPaid} />
-        <Row label="Tiết kiệm & quỹ đã chuyển" value={-a.savingsNet} />
-        <Row label="Chi linh hoạt" value={-a.flexSpent} />
-        {a.adjust !== 0 && <Row label="Điều chỉnh số dư" value={a.adjust} />}
-        {Math.abs(a.other) >= 1000 && <Row label="Khác (cho mượn, trả nợ, chuyển đi…)" value={a.other} />}
-        <Row label="Số dư phải có" value={a.balance} strong />
-      </dl>
-      <p className="mt-1 text-xs font-semibold text-ink-500">
-        {a.unallocated > 0 && `Trong đó ${formatVnd(a.unallocated)} tiền dư chưa phân bổ. `}
-        VCB {formatVnd(bank)} · tiền mặt {formatVnd(cash)}. Mở app VCB và đếm ví: lệch thì sửa số dư ở Cấu hình → Ngân hàng.
-      </p>
-
-      <div className={`mt-3 rounded-2xl p-3 ${a.canSpend < 0 ? 'bg-attn-50' : 'bg-brand-50'}`}>
-        <div className="flex items-baseline justify-between gap-2">
-          <span className={`text-sm font-extrabold ${a.canSpend < 0 ? 'text-attn-800' : 'text-brand-700'}`}>
-            {a.incomeLate ? 'Tiêu được tới khi tiền về' : a.canSpendUntil ? `Tiêu được tới ngày ${Number(a.canSpendUntil.slice(8))}` : 'Tiêu được tới cuối tháng'}
-          </span>
-          <span className={`num text-xl font-extrabold ${a.canSpend < 0 ? 'text-attn-800' : 'text-brand-700'}`}>
-            {a.canSpend < 0 ? '−' : ''}
-            {formatVnd(Math.abs(a.canSpend))}
-          </span>
+      {/* 1 · Mỗi ngày được tiêu: kế hoạch ↔ thực tế */}
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="rounded-2xl bg-ink-50 p-3">
+          <p className="text-xs font-extrabold tracking-wide text-ink-400 uppercase">Kế hoạch</p>
+          <p className="num mt-1 text-2xl leading-none font-extrabold">{k(planDay)}</p>
+          <p className="text-xs font-semibold text-ink-500">mỗi ngày</p>
+          <p className="mt-2 text-xs text-ink-500">
+            {k(r.flexibleBudget - (r.flexibleSpent - r.todaySpent))} chia {r.daysLeft} ngày còn lại
+          </p>
         </div>
-        <p className={`mt-0.5 text-xs font-semibold ${a.canSpend < 0 ? 'text-attn-700' : 'text-brand-600'}`}>
-          {a.incomeLate
-            ? 'Có khoản thu trễ hẹn. Tiền đang có, trừ tiền đệm và khoản cố định tới hạn, là tất cả những gì bạn có cho tới khi tiền về.'
-            : a.canSpendUntil
-            ? `Tiền đang có, trừ tiền đệm và khoản cố định tới hạn trước ngày ${Number(a.canSpendUntil.slice(8))}, lúc ${waitingNames(a, a.canSpendUntil)} về.`
-            : 'Tiền đang có, trừ tiền đệm, khoản cố định chưa trả và tiết kiệm chưa chuyển.'}
+        <div className={`rounded-2xl p-3 ${squeezed || a.incomeLate ? 'bg-attn-50' : 'bg-brand-50'}`}>
+          <p className={`text-xs font-extrabold tracking-wide uppercase ${squeezed || a.incomeLate ? 'text-attn-600' : 'text-brand-600'}`}>Thực tế hôm nay</p>
+          <p className={`num mt-1 text-2xl leading-none font-extrabold ${squeezed || a.incomeLate ? 'text-attn-800' : 'text-brand-700'}`}>{k(r.todayLimit)}</p>
+          <p className={`text-xs font-semibold ${squeezed || a.incomeLate ? 'text-attn-700' : 'text-brand-600'}`}>mỗi ngày</p>
+          <p className={`mt-2 text-xs ${squeezed || a.incomeLate ? 'text-attn-700' : 'text-brand-700'}`}>{reason}</p>
+        </div>
+      </div>
+
+      {/* 2 · Vì sao: tiền đang có được chia ra sao */}
+      <div className="mt-4">
+        <div className="flex items-baseline justify-between">
+          <h3 className="text-sm font-extrabold">Tiền đang có</h3>
+          <span className="num text-sm font-extrabold">{formatVnd(a.balance)}</span>
+        </div>
+        <div className="mt-2 flex h-4 overflow-hidden rounded-full bg-ink-100">
+          {parts.map((p) => (
+            <div key={p.key} style={{ width: `${(p.value / barTotal) * 100}%`, background: p.color }} title={p.label} />
+          ))}
+        </div>
+        <ul className="mt-2 flex flex-col gap-1 text-xs">
+          {parts.map((p) => (
+            <li key={p.key} className="flex items-center gap-2">
+              <span className="size-2.5 shrink-0 rounded-full" style={{ background: p.color }} />
+              <span className={`flex-1 ${p.key === 'spend' ? 'font-extrabold text-ink-900' : 'text-ink-600'}`}>{p.label}</span>
+              <span className={`num font-bold ${p.key === 'spend' ? 'text-ink-900' : 'text-ink-600'}`}>{formatVnd(p.value)}</span>
+            </li>
+          ))}
+        </ul>
+        <p className={`mt-2 rounded-xl px-3 py-2 text-sm font-semibold ${squeezed || a.incomeLate ? 'bg-attn-50 text-attn-800' : 'bg-brand-50 text-brand-700'}`}>
+          {a.canSpend <= 0
+            ? 'Tiền đang có chỉ đủ giữ cho các khoản phải trả, chưa còn để tiêu.'
+            : `${k(a.canSpend)} chia ${spanDays} ngày ${until ? `tới ngày ${Number(until.slice(8))}` : 'tới cuối tháng'} ≈ ${k(perDay)}/ngày`}
+          {squeezed && a.canSpend > 0 && `, ít hơn kế hoạch ${k(planDay)} nên tạm bóp. Tiền về rồi phần bóp được trả lại cho các ngày sau.`}
+          {!squeezed && a.canSpend > 0 && ', đủ cho kế hoạch.'}
         </p>
       </div>
+
+      {/* 3 · Kế hoạch so với thực tế */}
+      <div className="mt-4">
+        <h3 className="text-sm font-extrabold">Kế hoạch so với thực tế</h3>
+        <p className="mt-1 text-xs text-ink-500">
+          {a.expected.opening !== 0 && `${k(a.expected.opening)} ${fromStart ? 'đang có' : 'dư tháng trước'} `}
+          {a.expected.buffer > 0 && `− ${k(a.expected.buffer)} đệm `}+ {k(a.expected.income)} thu − {k(a.expected.fixed)} cố định − {k(a.expected.savings)} tiết kiệm ={' '}
+          <b className="text-ink-800">{k(a.expected.flexible)} để tiêu</b>
+        </p>
+        {changes.length > 0 && (
+          <p className="mt-1 text-xs font-semibold text-brand-700">
+            Bây giờ {k(a.flexibleNow)} để tiêu ({changes.join(', ')})
+          </p>
+        )}
+        <div className="mt-2 flex flex-col gap-2.5 text-sm">
+          <Compare label="Nguồn thu" hint="đã nhận" value={a.received + a.unexpected} max={a.expected.income} good />
+          <Compare label="Khoản cố định" hint="đã trả" value={a.fixedPaid} max={a.expected.fixed} />
+          <Compare label="Tiết kiệm" hint="đã chuyển" value={a.savingsNet} max={a.expected.savings} good />
+          <Compare label="Chi linh hoạt" hint="đã chi" value={a.flexSpent} max={a.flexibleNow} />
+        </div>
+      </div>
+
+      {/* 4 · Đối soát số dư */}
+      <button
+        type="button"
+        onClick={() => setLedger(!ledger)}
+        aria-expanded={ledger}
+        className="mt-4 flex w-full items-center gap-2 border-t-2 border-ink-100 pt-3 text-left text-sm font-extrabold text-ink-600"
+      >
+        <span className="flex-1">Đối soát số dư</span>
+        <ChevronDown size={18} className={`transition-transform ${ledger ? 'rotate-180' : ''}`} />
+      </button>
+      {ledger && (
+        <>
+          <dl className="mt-1 text-sm">
+            <Row label={openingLabel} value={a.opening} />
+            <Row label="Nguồn thu đã nhận" value={a.received} />
+            {a.unexpected > 0 && <Row label="Thu ngoài dự kiến" value={a.unexpected} />}
+            <Row label="Cố định đã trả" value={-a.fixedPaid} />
+            <Row label="Tiết kiệm & quỹ đã chuyển" value={-a.savingsNet} />
+            <Row label="Chi linh hoạt" value={-a.flexSpent} />
+            {a.adjust !== 0 && <Row label="Điều chỉnh số dư" value={a.adjust} />}
+            {Math.abs(a.other) >= 1000 && <Row label="Khác (cho mượn, trả nợ, chuyển đi…)" value={a.other} />}
+            <Row label="Số dư phải có" value={a.balance} strong />
+          </dl>
+          <p className="mt-1 text-xs font-semibold text-ink-500">
+            VCB {formatVnd(bank)} · tiền mặt {formatVnd(cash)}. Mở app VCB và đếm ví: lệch thì sửa số dư ở Cấu hình → Ngân hàng.
+          </p>
+        </>
+      )}
     </section>
+  )
+}
+
+/** Một dòng kế hoạch so với thực tế: thực tế / dự kiến + thanh */
+function Compare(props: { label: string; hint: string; value: number; max: number; good?: boolean }) {
+  const over = props.value > props.max
+  const pct = Math.min(100, (props.value / Math.max(props.max, 1)) * 100)
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="font-bold">{props.label}</span>
+        <span className="num text-xs font-semibold text-ink-500">
+          <b className={`${over && !props.good ? 'text-[#D85A30]' : 'text-ink-800'}`}>{formatVnd(props.value)}</b> {props.hint} / {formatVnd(props.max)}
+        </span>
+      </div>
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-ink-100">
+        <div
+          className={`h-full rounded-full transition-all ${over ? (props.good ? 'bg-brand-500' : 'bg-[#D85A30]') : 'bg-brand-400'}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
   )
 }
 
@@ -289,11 +382,3 @@ function Row(props: { label: string; value: number; strong?: boolean }) {
   )
 }
 
-function Bar({ value, max }: { value: number; max: number }) {
-  const pct = Math.min(100, (value / max) * 100)
-  return (
-    <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-ink-100">
-      <div className={`h-full rounded-full transition-all ${value > max ? 'bg-[#D85A30]' : pct > 80 ? 'bg-attn-400' : 'bg-brand-400'}`} style={{ width: `${pct}%` }} />
-    </div>
-  )
-}

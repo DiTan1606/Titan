@@ -109,7 +109,7 @@ export function MonthPlanDetail() {
           <DaySummarySheet day={summaryDay} kinds={kinds} beforePlan={!!summaryDay && summaryDay.date < (actual?.startDay ?? plan!.createdDay)} onClose={() => setSummaryDay(null)} />
           <KindPicker day={pickDay?.date ?? null} current={pickDay?.kind ?? 'normal'} kinds={kinds} onPick={pickKind} onClose={() => setPickDay(null)} />
 
-          {actual && <MonthCard month={month} result={result} actual={actual} onEdit={() => setEditingPlan(true)} />}
+          {actual && <MonthCard month={month} today={today} result={result} actual={actual} onEdit={() => setEditingPlan(true)} />}
           {actual && <ExtraCard month={month} actual={actual} />}
           {actual && <IncomeCard month={month} actual={actual} today={today} categories={cats} />}
         </>
