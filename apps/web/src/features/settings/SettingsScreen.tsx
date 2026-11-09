@@ -56,7 +56,7 @@ export function SettingsScreen(props: { onOpenNotifications: () => void }) {
             Quyền riêng tư
           </a>
         </div>
-        <span className="rounded-xl bg-brand-50 px-3 py-1 text-sm font-extrabold text-brand-600">Titan 1.6.5</span>
+        <span className="rounded-xl bg-brand-50 px-3 py-1 text-sm font-extrabold text-brand-600">Titan 1.6.6</span>
       </section>
 
       <Sheet open={open === 'notify'} onClose={close} title="Thông báo" autoFocus={false}>

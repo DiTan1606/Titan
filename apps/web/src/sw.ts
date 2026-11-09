@@ -24,7 +24,7 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification(data.title ?? 'Titan', {
       body: data.body ?? '',
       icon: '/icon-192.png',
-      badge: '/favicon-48.png',
+      badge: '/badge-48.png', // nền trong suốt: Android tô một màu theo hình
       data: { url: data.url ?? '/' },
     }),
   )
