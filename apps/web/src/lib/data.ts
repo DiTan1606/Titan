@@ -634,6 +634,40 @@ export async function ensureSubcategory(parent: Category, name: string, existing
   return data.id
 }
 
+/**
+ * V16-15 · Tên khoản cố định / nguồn thu chính là danh mục chi tiết của nó (trong danh mục lớn `parentId`).
+ * Đã có danh mục chi tiết trùng tên → dùng lại (mở lại nếu đang ẩn). Khoản đang gắn một danh mục chi tiết của cùng
+ * danh mục lớn mà chỉ đổi tên → đổi tên luôn danh mục đó (giao dịch cũ theo tên mới). Còn lại → tạo mới.
+ */
+export async function linkNamedSubcategory(
+  parentId: string,
+  name: string,
+  categories: Category[],
+  current: { categoryId: string | null; canRename: boolean } = { categoryId: null, canRename: false },
+): Promise<string> {
+  const parent = categories.find((c) => c.id === parentId)
+  if (!parent) throw new Error('Không tìm thấy danh mục')
+  const clean = name.trim().slice(0, 40)
+  const same = categories.find((c) => c.parentId === parentId && c.name.toLowerCase() === clean.toLowerCase())
+  if (same) {
+    if (same.hiddenSelf) await supabase.from('categories').update({ hidden_at: null }).eq('id', same.id)
+    return same.id
+  }
+  const mine = categories.find((c) => c.id === current.categoryId && c.parentId === parentId)
+  if (mine && current.canRename) {
+    const { error } = await supabase.from('categories').update({ name: clean, hidden_at: null }).eq('id', mine.id)
+    if (error) throw new Error(error.message)
+    return mine.id
+  }
+  const { data, error } = await supabase
+    .from('categories')
+    .insert({ kind: parent.kind, name: clean, parent_id: parentId, sort_order: 900 })
+    .select('id')
+    .single()
+  if (error) throw new Error(error.message)
+  return data.id
+}
+
 /** Tháng liền trước của "YYYY-MM-01" */
 export function prevMonth(month: string): string {
   const [y, m] = month.split('-').map(Number)

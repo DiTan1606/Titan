@@ -3,7 +3,7 @@ import { Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { CategoryPicker } from '../../components/CategoryPicker'
 import { MoneyInput } from '../../components/MoneyInput'
-import type { Category, RecurringItem } from '../../lib/data'
+import { type Category, linkNamedSubcategory, type RecurringItem } from '../../lib/data'
 import { supabase } from '../../lib/supabase'
 import { Button } from '../../ui/Button'
 import { Sheet } from '../../ui/Sheet'
@@ -20,6 +20,7 @@ function useSaver() {
     if (error) return toast(error.message, { tone: 'error' })
     await qc.invalidateQueries({ queryKey: ['plan'] })
     await qc.invalidateQueries({ queryKey: ['funds'] })
+    await qc.invalidateQueries({ queryKey: ['categories'] })
     toast(ok, { tone: 'success' })
     done()
   }
@@ -42,6 +43,7 @@ function Field(props: { label: string; hint?: string; children: React.ReactNode 
 export function RecurringSheet(props: {
   item: RecurringItem | 'new' | null
   categories: Category[]
+  recurring?: RecurringItem[]
   onClose: () => void
   onCreatedCategory: () => void
 }) {
@@ -53,15 +55,24 @@ export function RecurringSheet(props: {
   )
 }
 
-function RecurringForm(props: { item: RecurringItem | null; categories: Category[]; onClose: () => void; onCreatedCategory: () => void }) {
+function RecurringForm(props: {
+  item: RecurringItem | null
+  categories: Category[]
+  recurring?: RecurringItem[]
+  onClose: () => void
+  onCreatedCategory: () => void
+}) {
   const { busy, run } = useSaver()
   const [name, setName] = useState(props.item?.name ?? '')
   const [amount, setAmount] = useState<number | null>(props.item?.amount ?? null)
   const [dueDay, setDueDay] = useState(props.item?.dueDay?.toString() ?? '')
-  const [categoryId, setCategoryId] = useState(props.item?.categoryId ?? null)
+  // V16-15: chỉ chọn danh mục lớn; tên khoản là danh mục chi tiết
+  const current = props.categories.find((c) => c.id === props.item?.categoryId)
+  const [parentId, setParentId] = useState<string | null>(current ? (current.parentId ?? current.id) : null)
   const [active, setActive] = useState(props.item?.active ?? true)
   const day = dueDay ? Number(dueDay) : null
-  const valid = name.trim() && amount && (day === null || (day >= 1 && day <= 31))
+  const valid = name.trim() && amount && parentId && (day === null || (day >= 1 && day <= 31))
+  const parentName = props.categories.find((c) => c.id === parentId)?.name
 
   return (
     <div className="flex flex-col gap-4">
@@ -88,8 +99,15 @@ function RecurringForm(props: { item: RecurringItem | null; categories: Category
           />
         </Field>
       </div>
-      <Field label="Danh mục" hint="Khi thanh toán, khoản thuộc danh mục này được tính vào túi cố định">
-        <CategoryPicker categories={props.categories} kind="expense" value={categoryId} onChange={setCategoryId} onCreated={props.onCreatedCategory} />
+      <Field
+        label="Danh mục"
+        hint={
+          parentId && name.trim()
+            ? `Khi trả, ghi chi vào ${parentName} → ${name.trim()} là Titan tính vào khoản này`
+            : 'Tên khoản sẽ thành danh mục chi tiết trong danh mục bạn chọn'
+        }
+      >
+        <CategoryPicker categories={props.categories} kind="expense" value={parentId} onChange={setParentId} parentOnly />
       </Field>
       <label className="flex items-center justify-between rounded-2xl bg-ink-50 px-4 py-3 font-bold">
         Đang dùng
@@ -110,12 +128,25 @@ function RecurringForm(props: { item: RecurringItem | null; categories: Category
           full
           disabled={busy || !valid}
           onClick={() => {
-            const row = { name: name.trim(), amount: amount ?? 0, due_day: day, category_id: categoryId, active }
             run(
-              () =>
-                props.item
+              async () => {
+                // chỉ đổi tên danh mục chi tiết khi không khoản nào khác dùng chung
+                const shared = (props.recurring ?? []).some((r) => r.id !== props.item?.id && r.categoryId === props.item?.categoryId)
+                let category_id: string
+                try {
+                  category_id = await linkNamedSubcategory(parentId!, name, props.categories, {
+                    categoryId: props.item?.categoryId ?? null,
+                    canRename: !shared,
+                  })
+                } catch (e) {
+                  return { error: { message: (e as Error).message } }
+                }
+                props.onCreatedCategory()
+                const row = { name: name.trim(), amount: amount ?? 0, due_day: day, category_id, active }
+                return props.item
                   ? supabase.from('recurring_items').update(row).eq('id', props.item.id)
-                  : supabase.from('recurring_items').insert(row),
+                  : supabase.from('recurring_items').insert(row)
+              },
               'Đã lưu khoản cố định',
               props.onClose,
             )

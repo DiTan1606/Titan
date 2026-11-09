@@ -181,12 +181,13 @@ export function computePlan(input: PlanInput): PlanResult {
 
   // Khoản cố định: chi có danh mục (hoặc danh mục cha) trùng danh mục của khoản cố định (V11-3)
   const fixedCats = new Set(input.fixed.map((f) => f.categoryId).filter((c): c is string => !!c))
-  const isFixed = (s: Spend) => (!!s.categoryId && fixedCats.has(s.categoryId)) || (!!s.parentId && fixedCats.has(s.parentId))
+  // V16-15: chỉ giao dịch đúng danh mục (chi tiết) của khoản mới tính vào khoản đó; chi vào danh mục lớn là chi linh hoạt
+  const isFixed = (s: Spend) => !!s.categoryId && fixedCats.has(s.categoryId)
 
   const spentByFixedCat = new Map<string, number>()
   for (const s of spends) {
     if (!isFixed(s)) continue
-    const key = s.categoryId && fixedCats.has(s.categoryId) ? s.categoryId : s.parentId!
+    const key = s.categoryId!
     spentByFixedCat.set(key, (spentByFixedCat.get(key) ?? 0) + s.amount)
   }
   // Nhiều khoản cùng danh mục: chia tiền đã chi lần lượt theo thứ tự ngày đến hạn; khoản cuối của danh mục nhận phần lố

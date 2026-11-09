@@ -72,13 +72,19 @@ describe('matchIncomes – nguồn thu tự tick', () => {
     expect(r.sources.every((s) => !s.done)).toBe(true) // tick do người dùng bấm
     expect(r.unexpected).toBe(800_000)
   })
-  it('danh mục chi tiết của danh mục nguồn cũng tính; điều chỉnh số dư thì không', () => {
-    const r = matchIncomes(sources, [
-      flow({ type: 'income', amount: 400_000, categoryId: 'family-sub', parentId: 'family', from: 'cash' }),
+  it('V16-15: chỉ đúng danh mục chi tiết của nguồn mới tính; thu vào danh mục lớn hay điều chỉnh số dư thì không', () => {
+    const named = [
+      { name: 'Lương Highlands', amount: 2_000_000, day: 20, categoryId: 'salary-hl' },
+      { name: 'Lương gia sư', amount: 1_000_000, day: 25, categoryId: 'salary-tutor' },
+    ]
+    const r = matchIncomes(named, [
+      flow({ type: 'income', amount: 2_000_000, categoryId: 'salary-hl', parentId: 'salary' }),
+      flow({ type: 'income', amount: 400_000, categoryId: 'salary-tutor', parentId: 'salary', from: 'cash' }),
+      flow({ type: 'income', amount: 300_000, categoryId: 'salary' }), // chỉ chọn "Lương"
       flow({ type: 'income', amount: 500_000, source: 'reconcile' }),
     ])
-    expect(r.sources[0].received).toBe(400_000)
-    expect(r.unexpected).toBe(0)
+    expect(r.sources.map((s) => s.received)).toEqual([2_000_000, 400_000])
+    expect(r.unexpected).toBe(300_000)
   })
 })
 

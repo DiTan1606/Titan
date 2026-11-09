@@ -14,6 +14,8 @@ export function CategoryPicker(props: {
   /** gọi sau khi tạo danh mục cấp 2 mới, để tải lại danh sách */
   onCreated?: () => void
   compact?: boolean
+  /** V16-15 · chỉ chọn danh mục lớn (danh mục chi tiết lấy theo tên khoản cố định / nguồn thu) */
+  parentOnly?: boolean
 }) {
   const toast = useToast()
   const current = props.categories.find((c) => c.id === props.value)
@@ -76,7 +78,7 @@ export function CategoryPicker(props: {
         })}
       </div>
 
-      {parent && (
+      {parent && !props.parentOnly && (
         <div className="flex flex-col gap-2">
           {children.length > 0 && (
             <div className={props.compact ? '-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5' : 'flex flex-wrap gap-1.5'}>

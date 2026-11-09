@@ -57,7 +57,8 @@ export function matchIncomes(sources: IncomeSource[], flows: Flow[]): { sources:
   const order = sources.map((s, i) => ({ s, i })).sort((a, b) => (a.s.day ?? 99) - (b.s.day ?? 99))
   const got = sources.map(() => 0)
   let unexpected = 0
-  const matches = (s: IncomeSource, f: Flow) => !!s.categoryId && (s.categoryId === f.categoryId || s.categoryId === f.parentId)
+  // V16-15: đúng danh mục (chi tiết) của nguồn; thu vào danh mục lớn là thu ngoài dự kiến
+  const matches = (s: IncomeSource, f: Flow) => !!s.categoryId && s.categoryId === f.categoryId
   for (const f of flows.filter(isIncome)) {
     const mine = order.filter(({ s }) => matches(s, f))
     if (!mine.length) {

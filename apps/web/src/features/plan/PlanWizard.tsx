@@ -18,6 +18,7 @@ import {
   useMonthPlan,
   useMonthSpends,
   useOpeningBalance,
+  linkNamedSubcategory,
   useDayLimits,
   useProfile,
   useRecurringItems,
@@ -60,7 +61,16 @@ const TITLE: Record<Step, string> = {
 }
 
 // V16: nguồn thu có ngày dự kiến nhận + danh mục thu (để tự tick khi tiền về)
-type Source = { key: number; name: string; amount: number | null; day: number | null; categoryId: string | null; done?: boolean }
+// V16-15: categoryId = danh mục lớn (chip), linkedId = danh mục chi tiết mang tên nguồn (đã lưu trước đó)
+type Source = {
+  key: number
+  name: string
+  amount: number | null
+  day: number | null
+  categoryId: string | null
+  linkedId?: string | null
+  done?: boolean
+}
 let sourceKey = 0
 const src = (name: string, amount: number | null, day: number | null = null, categoryId: string | null = null): Source => ({
   key: ++sourceKey,
@@ -118,13 +128,26 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
   )
   const defaultSources = useMemo(() => {
     if (!plan.isSuccess || !lastIncome.isSuccess || !categories.isSuccess) return null
-    const catOf = (name: string) => incomeCats.find((c) => c.name.toLowerCase() === name.toLowerCase())?.id ?? null
+    const all = categories.data ?? []
+    // tên → danh mục lớn (tên có thể là danh mục chi tiết, ví dụ "Lương Highlands" → "Lương")
+    const catOf = (name: string) => {
+      const c = all.find((x) => x.kind === 'income' && x.name.toLowerCase() === name.toLowerCase())
+      return c ? (c.parentId ?? c.id) : null
+    }
     const p = plan.data
-    if (p?.incomeSources.length) return p.incomeSources.map((x) => ({ ...src(x.name, x.amount, x.day, x.categoryId ?? catOf(x.name)), done: x.done }))
+    if (p?.incomeSources.length)
+      return p.incomeSources.map((x) => {
+        const c = all.find((y) => y.id === x.categoryId)
+        return {
+          ...src(x.name, x.amount, x.day, c ? (c.parentId ?? c.id) : catOf(x.name)),
+          linkedId: c?.parentId ? c.id : null,
+          done: x.done,
+        }
+      })
     if (p && p.income > 0) return [src('Thu nhập', p.income)]
     if (lastIncome.data.length) return lastIncome.data.map((x) => src(x.name, x.amount, null, catOf(x.name)))
     return [src('Gia đình gửi', null, null, catOf('Gia đình gửi')), src('Lương', null, null, catOf('Lương'))]
-  }, [plan.isSuccess, plan.data, lastIncome.isSuccess, lastIncome.data, categories.isSuccess, incomeCats])
+  }, [plan.isSuccess, plan.data, lastIncome.isSuccess, lastIncome.data, categories.isSuccess, categories.data])
   const sources = sourcesDraft ?? defaultSources
   const savings = savingsDraft === undefined ? (plan.data?.savings ?? 300_000) : savingsDraft
   const caps = capsDraft ?? (budgets.data ? new Map<string, number | null>(budgets.data) : null)
@@ -220,9 +243,21 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
   async function finish() {
     setBusy(true)
     try {
-      const clean = (sources ?? [])
-        .filter((s) => (s.amount ?? 0) > 0)
-        .map((s) => ({ name: s.name.trim() || 'Thu nhập', amount: s.amount ?? 0, day: s.day, category_id: s.categoryId, ...(s.done ? { done: true } : {}) }))
+      // V16-15: tên nguồn thu là danh mục chi tiết trong danh mục lớn đã chọn
+      const kept = (sources ?? []).filter((s) => (s.amount ?? 0) > 0)
+      const clean: { parent: string | null; name: string; amount: number; day: number | null; category_id: string | null; done?: boolean }[] = []
+      for (const s of kept) {
+        const name = s.name.trim() || 'Thu nhập'
+        const shared = kept.some((o) => o !== s && o.linkedId && o.linkedId === s.linkedId)
+        // hai nguồn trùng tên trong cùng danh mục lớn dùng chung một danh mục chi tiết
+        const twin = clean.find((c) => c.parent === s.categoryId && c.name.toLowerCase() === name.toLowerCase())
+        const category_id = !s.categoryId
+          ? null
+          : twin
+            ? twin.category_id
+            : await linkNamedSubcategory(s.categoryId, name, cats, { categoryId: s.linkedId ?? null, canRename: !shared })
+        clean.push({ parent: s.categoryId, name, amount: s.amount ?? 0, day: s.day, category_id, ...(s.done ? { done: true } : {}) })
+      }
       // Tháng mới: loại ngày lấy theo Cấu hình, chưa cấu hình thì theo tháng gần nhất (V13-4)
       let dayKinds: unknown = undefined
       if (!editing) {
@@ -236,7 +271,7 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
         month,
         income: typedIncome,
         savings: savingsUsed,
-        income_sources: clean,
+        income_sources: clean.map(({ parent: _parent, ...x }) => x),
         carry_over: carryOver,
         buffer,
         closed_fixed: [...closed],
@@ -360,9 +395,7 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
                     <label className="flex items-center gap-3">
                       <span className="min-w-0 flex-1">
                         <span className="block font-extrabold">Dư tháng trước</span>
-                        <span className="block text-xs text-ink-500">
-                          Số dư VCB + tiền mặt {startDay > month ? `ngày ${Number(startDay.slice(8))}/${Number(startDay.slice(5, 7))}` : 'đầu tháng'}, Titan tự tính
-                        </span>
+                        <span className="block text-xs text-ink-500">{buffer > 0 ? `Đã chừa ${formatVnd(buffer)} tiền đệm` : 'Không chừa tiền đệm'}</span>
                       </span>
                       <span className="num shrink-0 text-lg font-extrabold">{opening === null ? '…' : formatVnd(opening)}</span>
                       <input
@@ -373,9 +406,6 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
                         className="size-6 shrink-0 accent-brand-500"
                       />
                     </label>
-                    {carryOver && buffer > 0 && (
-                      <p className="text-xs text-ink-400">Chừa {formatVnd(buffer)} tiền đệm, không tính để tiêu. Đổi ở bước Tiết kiệm.</p>
-                    )}
                   </div>
 
                   {sources!.map((s, k) => (
@@ -442,9 +472,13 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
                           )
                         })}
                       </div>
-                      {!s.categoryId && (s.amount ?? 0) > 0 && (
-                        <p className="text-xs text-attn-600">Chọn danh mục thu để Titan tự tick khi tiền về</p>
-                      )}
+                      {!s.categoryId && (s.amount ?? 0) > 0 ? (
+                        <p className="text-xs text-attn-600">Chọn danh mục thu để Titan đọc được tiến độ khi tiền về</p>
+                      ) : s.categoryId && s.name.trim() ? (
+                        <p className="text-xs text-ink-400">
+                          Tiền về thì ghi thu vào {incomeCats.find((c) => c.id === s.categoryId)?.name} → {s.name.trim()}
+                        </p>
+                      ) : null}
                     </div>
                   ))}
                   <button
@@ -630,7 +664,7 @@ function Wizard(props: { month: string; today: string; onClose: () => void }) {
 
       <KindPicker day={pickDay} current={pickDay ? kindOf(pickDay) : 'normal'} kinds={kinds} onPick={pickKind} onClose={() => setPickDay(null)} />
       <FundAccountSheet fund={settingUpPiggy && piggy ? piggy : null} onClose={() => setSettingUpPiggy(false)} />
-      <RecurringSheet item={editingItem} categories={cats} onClose={() => setEditingItem(null)} onCreatedCategory={refresh} />
+      <RecurringSheet item={editingItem} categories={cats} recurring={recurring.data} onClose={() => setEditingItem(null)} onCreatedCategory={refresh} />
     </motion.div>
   )
 }

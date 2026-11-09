@@ -34,16 +34,21 @@ describe('computePlan – túi cố định và tiền linh hoạt', () => {
     expect(p.daysLeft).toBe(30)
   })
 
-  it('chi thuộc danh mục cố định (kể cả danh mục con) không trừ hạn mức ngày', () => {
+  it('chi đúng danh mục của khoản cố định không trừ hạn mức ngày; chi vào danh mục lớn khác (V16-15) thì có', () => {
     const p = computePlan({
       ...base,
+      fixed: [
+        { id: 'rent', name: 'Tiền trọ', amount: 4_500_000, dueDay: 5, categoryId: 'rent' },
+        { id: 'ai', name: 'Google AI Pro', amount: 135_556, dueDay: 7, categoryId: 'google-ai-pro' },
+      ],
       spends: [
-        { date: '2026-11-01', amount: 4_500_000, categoryId: 'home', parentId: null },
+        { date: '2026-11-01', amount: 4_500_000, categoryId: 'rent', parentId: 'home' },
         { date: '2026-11-01', amount: 135_556, categoryId: 'google-ai-pro', parentId: 'ai' },
         { date: '2026-11-01', amount: 50_000, categoryId: 'drink', parentId: 'food' },
+        { date: '2026-11-01', amount: 30_000, categoryId: 'ai', parentId: null }, // chỉ chọn danh mục lớn AI
       ],
     })
-    expect(p.todaySpent).toBe(50_000)
+    expect(p.todaySpent).toBe(80_000)
     expect(p.fixedPaid).toBe(4_635_556)
     // V16-11: chi đủ nhưng chưa tick thì chưa "xong" (tick do người dùng bấm)
     expect(p.fixedItems.every((f) => !f.done && f.paid >= f.amount)).toBe(true)
