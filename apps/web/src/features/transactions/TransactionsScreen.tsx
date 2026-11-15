@@ -1,9 +1,9 @@
 import { vnDate } from '@shared/quick-entry.ts'
-import { ChevronLeft, ChevronRight, Landmark, PiggyBank, Target, Wallet } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Landmark, Wallet } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { EmptyState } from '../../components/EmptyState'
 import { TransactionRow } from '../../components/TransactionRow'
-import { fundsOf, type Transaction, useCategories, useDayFlex, useWalletTransactions, useWallets } from '../../lib/data'
+import { type Transaction, useCategories, useDayFlex, useWalletsTransactions, useWallets } from '../../lib/data'
 import { directionFor, type Mode, periodOf, shiftAnchor } from '../../lib/period'
 import { formatDay, formatVnd } from '../../lib/format'
 import { useVnDays } from '../../lib/useVnDays'
@@ -15,42 +15,53 @@ const MODES: { id: Mode; label: string }[] = [
   { id: 'year', label: 'Năm' },
 ]
 
-/** V13-6 · Giao dịch: tab VCB / Tiền mặt (V14: + Tiết kiệm và các quỹ, trượt ngang), lọc theo ngày / tháng / năm, nhóm theo ngày, mới nhất trước. */
+/**
+ * Giao dịch: lọc theo ngày / tháng / năm, nhóm theo ngày, mới nhất trước.
+ * V16: không còn chọn ví; mỗi ngày chia phần VCB và phần Tiền mặt, đầu thẻ là chi linh hoạt / hạn mức của ngày.
+ */
 export function TransactionsScreen() {
   const wallets = useWallets()
   const categories = useCategories()
   const { today, yesterday } = useVnDays()
-  // 'bank' | 'cash' | id của một quỹ
-  const [sel, setSel] = useState<string>('bank')
   const [mode, setMode] = useState<Mode>('month')
   const [anchor, setAnchor] = useState(today)
   const [editing, setEditing] = useState<Transaction | null>(null)
   const cats = useMemo(() => categories.data ?? [], [categories.data])
 
-  const wallet = wallets.data?.find((w) => (sel === 'bank' || sel === 'cash' ? w.kind === sel : w.id === sel))
-  const funds = fundsOf(wallets.data).filter((f) => f.accountSuffix || f.balance !== 0)
+  const bank = wallets.data?.find((w) => w.kind === 'bank')
+  const cash = wallets.data?.find((w) => w.kind === 'cash')
   const { from, to } = periodOf(mode, anchor)
-  const txns = useWalletTransactions({ walletId: wallet?.id, from, to })
+  const txns = useWalletsTransactions({ walletIds: [bank?.id, cash?.id].filter((x): x is string => !!x), from, to })
   const canNext = to <= today
   // V16 · chi linh hoạt / hạn mức của từng ngày (mọi ví) — khớp số ở Trang chủ và Kế hoạch
   const dayFlex = useDayFlex({ from, to })
 
   const { groups, totalOut, totalIn } = useMemo(() => {
+    const mine = new Set([bank?.id, cash?.id].filter(Boolean))
     let totalOut = 0
     let totalIn = 0
-    const map = new Map<string, { day: string; label: string; items: Transaction[] }>()
+    const map = new Map<string, { day: string; label: string; bank: Transaction[]; cash: Transaction[] }>()
     for (const t of txns.data ?? []) {
       const d = vnDate(new Date(t.occurredAt))
       const label = d === today ? 'Hôm nay' : d === yesterday ? 'Hôm qua' : formatDay(t.occurredAt)
-      const g = map.get(d) ?? { day: d, label, items: [] }
-      const dir = directionFor(t, wallet?.id)
-      if (dir === 'out') totalOut += t.amount
-      else if (dir === 'in') totalIn += t.amount
-      g.items.push(t)
+      const g = map.get(d) ?? { day: d, label, bank: [], cash: [] }
+      // một giao dịch có thể nằm ở cả hai phần (rút ATM: ra khỏi VCB, vào tiền mặt)
+      if (bank && (t.walletId === bank.id || t.toWalletId === bank.id)) g.bank.push(t)
+      if (cash && (t.walletId === cash.id || t.toWalletId === cash.id)) g.cash.push(t)
+      // tổng kỳ: chuyển giữa VCB và tiền mặt không tính là ra / vào
+      const fromMine = !!t.walletId && mine.has(t.walletId)
+      const toMine = !!t.toWalletId && mine.has(t.toWalletId)
+      if (t.type === 'transfer') {
+        if (fromMine && !toMine) totalOut += t.amount
+        else if (!fromMine && toMine) totalIn += t.amount
+      } else if (t.type !== 'borrow') {
+        if (directionFor(t, t.walletId ?? undefined) === 'out') totalOut += t.amount
+        else totalIn += t.amount
+      }
       map.set(d, g)
     }
     return { groups: [...map.values()], totalOut, totalIn }
-  }, [txns.data, today, yesterday, wallet?.id])
+  }, [txns.data, today, yesterday, bank, cash])
 
   const [y, m, d] = anchor.split('-').map(Number)
   const periodLabel = mode === 'year' ? `Năm ${y}` : mode === 'month' ? `Tháng ${m}/${y}` : anchor === today ? 'Hôm nay' : `${d}/${m}/${y}`
@@ -60,29 +71,6 @@ export function TransactionsScreen() {
       {/* Phần đầu cố định: tiêu đề + VCB / Tiền mặt + bộ lọc kỳ; chỉ danh sách bên dưới cuộn */}
       <div className="flex shrink-0 flex-col gap-3">
       <h1 className="text-3xl font-extrabold tracking-tight">Giao dịch</h1>
-
-      <div className="flex snap-x snap-mandatory scroll-px-1 gap-1 overflow-x-auto rounded-2xl bg-ink-100 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {[
-          { id: 'bank', label: 'VCB', icon: <Landmark size={18} strokeWidth={2.4} /> },
-          { id: 'cash', label: 'Tiền mặt', icon: <Wallet size={18} strokeWidth={2.4} /> },
-          ...funds.map((f) => ({
-            id: f.id,
-            label: f.name,
-            icon: f.isSavings ? <PiggyBank size={18} strokeWidth={2.4} /> : <Target size={18} strokeWidth={2.4} />,
-          })),
-        ].map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            aria-pressed={sel === t.id}
-            onClick={() => setSel(t.id)}
-            className={`flex w-[calc(50%-0.125rem)] shrink-0 snap-start items-center justify-center gap-2 rounded-xl py-2 font-bold ${sel === t.id ? 'bg-white text-brand-600 shadow-sm' : 'text-ink-500'}`}
-          >
-            {t.icon}
-            <span className="truncate">{t.label}</span>
-          </button>
-        ))}
-      </div>
 
       <section className="card flex flex-col gap-2 p-2.5">
         <div className="grid grid-cols-3 gap-1">
@@ -149,23 +137,37 @@ export function TransactionsScreen() {
       {txns.isError && <EmptyState mood="shock" title="Ủa, tải không được" text="Mạng chập chờn rồi. Kéo lại hoặc mở lại app thử xem." />}
 
       {groups.map((g) => (
-        <section key={g.label} className="card p-3">
+        <section key={g.day} className="card p-3">
           <div className="flex items-baseline justify-between px-2 pb-1">
             <h2 className="font-extrabold">{g.label}</h2>
             {dayFlex && <DayFlex spent={dayFlex.flex[g.day] ?? 0} limit={dayFlex.limits[g.day]} />}
           </div>
-          <ul>
-            {g.items.map((t) => (
-              <TransactionRow
-                key={t.id}
-                txn={t}
-                categories={cats}
-                direction={directionFor(t, wallet?.id)}
-                fixed={!!t.categoryId && !!dayFlex?.fixed.has(t.categoryId)}
-                onClick={() => setEditing(t)}
-              />
+          {(
+            [
+              ['bank', 'VCB', <Landmark key="i" size={14} strokeWidth={2.4} />, g.bank, bank?.id],
+              ['cash', 'Tiền mặt', <Wallet key="i" size={14} strokeWidth={2.4} />, g.cash, cash?.id],
+            ] as const
+          )
+            .filter(([, , , items]) => items.length > 0)
+            .map(([key, name, icon, items, walletId], k) => (
+              <div key={key} className={k > 0 ? 'mt-1 border-t border-ink-100 pt-1' : ''}>
+                <p className="flex items-center gap-1.5 px-2 pt-1.5 text-xs font-extrabold tracking-wide text-ink-400 uppercase">
+                  {icon} {name}
+                </p>
+                <ul>
+                  {items.map((t) => (
+                    <TransactionRow
+                      key={`${key}-${t.id}`}
+                      txn={t}
+                      categories={cats}
+                      direction={directionFor(t, walletId)}
+                      fixed={!!t.categoryId && !!dayFlex?.fixed.has(t.categoryId)}
+                      onClick={() => setEditing(t)}
+                    />
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
         </section>
       ))}
 

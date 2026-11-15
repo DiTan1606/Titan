@@ -268,6 +268,29 @@ export function useDayFlex(range: { from: string; to: string }) {
   }, [q.data, recurring.isSuccess, fixed])
 }
 
+/** V16 · Giao dịch của nhiều ví cùng lúc (trang Giao dịch: VCB + tiền mặt), mới nhất trước */
+export function useWalletsTransactions(opts: { walletIds: string[]; from: string; to: string }) {
+  const ids = opts.walletIds.join(',')
+  return useQuery({
+    queryKey: ['transactions', 'wallets', ids, opts.from, opts.to],
+    enabled: opts.walletIds.length > 0,
+    queryFn: async () =>
+      (
+        throwIf(
+          await supabase
+            .from('transactions')
+            .select(TXN_COLUMNS)
+            .is('deleted_at', null)
+            .or(`wallet_id.in.(${ids}),to_wallet_id.in.(${ids})`)
+            .gte('occurred_at', new Date(`${opts.from}T00:00:00+07:00`).toISOString())
+            .lt('occurred_at', new Date(`${opts.to}T00:00:00+07:00`).toISOString())
+            .order('occurred_at', { ascending: false })
+            .limit(2000),
+        ) ?? []
+      ).map(mapTxn),
+  })
+}
+
 /** Giao dịch lấy từ ngân hàng: chỉ sửa danh mục / mô tả / ghi chú, không sửa số tiền, không xóa (V13-7) */
 export const isBankTxn = (t: Pick<Transaction, 'source'>) => t.source === 'sms'
 
