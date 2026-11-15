@@ -26,12 +26,15 @@ export function TransactionRow({
   categories,
   onClick,
   direction,
+  fixed,
 }: {
   txn: Transaction
   categories: Category[]
   onClick?: () => void
   /** chiều tiền với ví đang xem (trang Giao dịch theo ví): chuyển nội bộ hiện +/− thay vì không dấu */
   direction?: 'out' | 'in' | null
+  /** V16 · chi thuộc khoản cố định: số tiền màu đen (chi linh hoạt màu đỏ) */
+  fixed?: boolean
 }) {
   const cat = categories.find((c) => c.id === txn.categoryId)
   const sign = txn.type === 'transfer' && direction ? (direction === 'out' ? '−' : '+') : SIGN[txn.type]
@@ -63,7 +66,15 @@ export function TransactionRow({
           </p>
         </div>
         <span
-          className={`num shrink-0 text-[15px] font-bold ${sign === '+' ? 'text-brand-500' : sign === '' ? 'text-ink-500' : 'text-ink-900'}`}
+          className={`num shrink-0 text-[15px] font-bold ${
+            sign === '+'
+              ? 'text-brand-500'
+              : sign === '' || txn.type === 'transfer'
+                ? 'text-ink-500'
+                : (txn.type === 'expense' || txn.type === 'borrow') && !fixed && txn.source !== 'reconcile'
+                  ? 'text-red-600'
+                  : 'text-ink-900'
+          }`}
         >
           {sign}
           {formatVnd(txn.amount)}

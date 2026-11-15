@@ -48,6 +48,10 @@ function EditForm(props: { txn: Transaction; categories: Category[]; onClose: ()
   const [categoryId, setCategoryId] = useState(txn.categoryId)
   const [note, setNote] = useState(txn.note ?? '')
   const [mood, setMood] = useState<string | null>(txn.mood)
+  // V16 · Ngày giờ (giờ Việt Nam) sửa được với giao dịch ghi tay; giao dịch từ VCB thì khóa
+  const initialAt = vnLocal(txn.occurredAt)
+  const [at, setAt] = useState(initialAt)
+  const [maxAt] = useState(() => vnLocal(new Date().toISOString()))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -73,6 +77,12 @@ function EditForm(props: { txn: Transaction; categories: Category[]; onClose: ()
       if (needsCategory(txn.type) && !categoryId) throw new Error('Chọn danh mục trước nhé')
       const patch: Record<string, unknown> = { description, category_id: categoryId }
       if (!locked) patch.amount = amount
+      if (!locked && at && at !== initialAt) {
+        const when = new Date(`${at}:00+07:00`)
+        if (Number.isNaN(when.getTime())) throw new Error('Ngày giờ không hợp lệ')
+        if (when.getTime() > Date.now() + 60_000) throw new Error('Không ghi được giao dịch ở tương lai')
+        patch.occurred_at = when.toISOString()
+      }
       if (note.trim() !== (txn.note ?? '')) patch.note = note.trim() || null
       if (mood !== txn.mood) patch.mood = mood
       await confirmTransaction(txn.id, patch)
@@ -131,9 +141,20 @@ function EditForm(props: { txn: Transaction; categories: Category[]; onClose: ()
         <div className="flex items-center gap-2 text-xs font-bold">
           <span className={`rounded-lg px-2 py-0.5 ${out ? 'bg-ink-100 text-ink-600' : 'bg-brand-50 text-brand-600'}`}>{typeLabel}</span>
           {wallet && <span className="rounded-lg bg-ink-50 px-2 py-0.5 text-ink-500">{wallet.kind === 'bank' ? 'VCB' : wallet.name}</span>}
-          <span className="flex-1 text-right text-ink-400">
-            {formatDay(txn.occurredAt)} · {formatTime(txn.occurredAt)}
-          </span>
+          {locked ? (
+            <span className="flex-1 text-right text-ink-400">
+              {formatDay(txn.occurredAt)} · {formatTime(txn.occurredAt)}
+            </span>
+          ) : (
+            <input
+              type="datetime-local"
+              aria-label="Ngày giờ giao dịch"
+              value={at}
+              max={maxAt}
+              onChange={(e) => setAt(e.target.value)}
+              className="num min-w-0 flex-1 rounded-lg border-2 border-ink-100 bg-white px-2 py-0.5 text-right text-xs font-bold text-ink-600 outline-none focus:border-brand-300"
+            />
+          )}
         </div>
         <div className="mt-3 flex items-center gap-3">
           <CategoryIcon category={cat} categories={props.categories} type={txn.type} size={44} />
@@ -233,4 +254,14 @@ function EditForm(props: { txn: Transaction; categories: Category[]; onClose: ()
       />
     </div>
   )
+}
+
+/** ISO → "YYYY-MM-DDTHH:mm" theo giờ Việt Nam (cho ô datetime-local) */
+function vnLocal(iso: string) {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+      .formatToParts(new Date(iso))
+      .map((x) => [x.type, x.value]),
+  )
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`
 }

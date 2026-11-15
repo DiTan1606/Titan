@@ -229,6 +229,45 @@ export function useWalletTransactions(opts: { walletId: string | undefined; from
   })
 }
 
+/**
+ * V16 · Chi linh hoạt từng ngày (mọi ví, giống Trang chủ / Kế hoạch) và hạn mức đã chốt của ngày đó, trong [from, to).
+ * Chi linh hoạt = chi tiêu (không phải điều chỉnh số dư) không thuộc danh mục của khoản cố định đang dùng.
+ */
+export function useDayFlex(range: { from: string; to: string }) {
+  const recurring = useRecurringItems()
+  const fixed = useMemo(
+    () => new Set((recurring.data ?? []).filter((r) => r.active && r.categoryId).map((r) => r.categoryId!)),
+    [recurring.data],
+  )
+  const q = useQuery({
+    queryKey: ['transactions', 'day-flex', range.from, range.to],
+    queryFn: async () => {
+      const [rows, limits] = await Promise.all([
+        supabase
+          .from('transactions')
+          .select('amount, occurred_at, category_id')
+          .is('deleted_at', null)
+          .in('type', ['expense', 'borrow'])
+          .neq('source', 'reconcile')
+          .gte('occurred_at', new Date(`${range.from}T00:00:00+07:00`).toISOString())
+          .lt('occurred_at', new Date(`${range.to}T00:00:00+07:00`).toISOString())
+          .limit(5000),
+        supabase.from('day_limits').select('day, planned').gte('day', range.from).lt('day', range.to),
+      ])
+      return {
+        spends: (throwIf(rows) ?? []).map((r) => ({ day: vnDate(new Date(r.occurred_at)), amount: Number(r.amount), categoryId: r.category_id as string | null })),
+        limits: Object.fromEntries((throwIf(limits) ?? []).map((l) => [l.day as string, Number(l.planned)])) as Record<string, number>,
+      }
+    },
+  })
+  return useMemo(() => {
+    if (!q.data || !recurring.isSuccess) return null
+    const flex: Record<string, number> = {}
+    for (const s of q.data.spends) if (!(s.categoryId && fixed.has(s.categoryId))) flex[s.day] = (flex[s.day] ?? 0) + s.amount
+    return { flex, limits: q.data.limits, fixed }
+  }, [q.data, recurring.isSuccess, fixed])
+}
+
 /** Giao dịch lấy từ ngân hàng: chỉ sửa danh mục / mô tả / ghi chú, không sửa số tiền, không xóa (V13-7) */
 export const isBankTxn = (t: Pick<Transaction, 'source'>) => t.source === 'sms'
 

@@ -66,12 +66,20 @@ export function MonthPlanDetail() {
     }
   }
 
-  const byParent = spentByParent(spends, activeFixed.map((r) => r.categoryId))
+  // V16 · Theo danh mục: mọi danh mục chi (kể cả 0đ), tổng = linh hoạt + cố định, nhiều nhất lên đầu.
+  // Ngân sách (nếu đặt) chỉ so với phần chi linh hoạt.
+  const flexByParent = spentByParent(spends, activeFixed.map((r) => r.categoryId))
+  const allByParent = spentByParent(spends)
   const budgetRows = cats
-    .filter((c) => c.kind === 'expense' && !c.parentId && c.systemKey !== 'unknown')
-    .map((c) => ({ category: c, spent: byParent.get(c.id) ?? 0, budget: budgets.data?.get(c.id) ?? null }))
-    .filter((r) => r.spent > 0 || r.budget)
-    .sort((a, b) => b.spent - a.spent)
+    .filter((c) => c.kind === 'expense' && !c.parentId && (!c.hidden || (allByParent.get(c.id) ?? 0) > 0))
+    .map((c) => {
+      const total = allByParent.get(c.id) ?? 0
+      const flex = flexByParent.get(c.id) ?? 0
+      return { category: c, total, flex, fixed: total - flex, budget: budgets.data?.get(c.id) ?? null }
+    })
+    .sort((a, b) => b.total - a.total || a.category.name.localeCompare(b.category.name, 'vi'))
+  const topTotal = Math.max(1, ...budgetRows.map((r) => r.total))
+  const monthTotal = budgetRows.reduce((t, r) => t + r.total, 0)
 
   return (
     <div className="flex flex-col gap-4 pb-4">
@@ -220,22 +228,36 @@ export function MonthPlanDetail() {
       )}
 
       <section className="card p-4">
-        <h2 className="text-lg font-extrabold">Theo danh mục</h2>
-        <p className="text-sm text-ink-500">Đặt mức tối đa ở Sửa kế hoạch</p>
+        <div className="flex items-baseline justify-between gap-2">
+          <h2 className="text-lg font-extrabold">Theo danh mục</h2>
+          <span className="num text-sm font-extrabold text-ink-600">{formatVnd(monthTotal)}</span>
+        </div>
+        <p className="text-sm text-ink-500">Tổng chi tháng này cả linh hoạt lẫn cố định, nhiều nhất ở trên. Đặt ngân sách ở Sửa kế hoạch.</p>
         <ul className="mt-3 flex flex-col gap-3">
-          {budgetRows.map(({ category, spent, budget }) => (
-            <li key={category.id}>
+          {budgetRows.map(({ category, total, flex, fixed, budget }) => (
+            <li key={category.id} className={total === 0 ? 'opacity-60' : ''}>
               <div className="flex w-full items-center gap-3">
                 <CategoryIcon category={category} categories={cats} size={36} />
                 <span className="min-w-0 flex-1">
-                  <span className="flex justify-between text-sm">
+                  <span className="flex justify-between gap-2 text-sm">
                     <span className="truncate font-bold">{category.name}</span>
-                    <span className={`num font-bold ${budget && spent > budget ? 'text-[#D85A30]' : 'text-ink-700'}`}>
-                      {formatVnd(spent)}
-                      {budget ? <span className="font-semibold text-ink-400"> / {formatVnd(budget)}</span> : null}
-                    </span>
+                    <span className="num shrink-0 font-extrabold text-ink-800">{formatVnd(total)}</span>
                   </span>
-                  {budget ? <Progress value={spent} max={budget} /> : <span className="text-xs text-ink-400">Chưa đặt ngân sách</span>}
+                  <span className="mt-1 block h-2 overflow-hidden rounded-full bg-ink-100">
+                    <span className="block h-full rounded-full bg-brand-300" style={{ width: `${(total / topTotal) * 100}%` }} />
+                  </span>
+                  {(fixed > 0 || budget) && (
+                    <span className="mt-1 block text-xs font-semibold text-ink-500">
+                      {fixed > 0 && `Cố định ${formatVnd(fixed)} · linh hoạt ${formatVnd(flex)}`}
+                      {fixed > 0 && budget ? ' · ' : ''}
+                      {budget ? (
+                        <span className={flex > budget ? 'text-red-600' : ''}>
+                          {fixed > 0 ? 'ngân sách' : `Linh hoạt ${formatVnd(flex)} / ngân sách`} {formatVnd(budget)}
+                          {flex > budget ? `, vượt ${formatVnd(flex - budget)}` : ''}
+                        </span>
+                      ) : null}
+                    </span>
+                  )}
                 </span>
               </div>
             </li>

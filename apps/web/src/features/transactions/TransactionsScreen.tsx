@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Landmark, PiggyBank, Target, Wallet } from '
 import { useMemo, useState } from 'react'
 import { EmptyState } from '../../components/EmptyState'
 import { TransactionRow } from '../../components/TransactionRow'
-import { fundsOf, type Transaction, useCategories, useWalletTransactions, useWallets } from '../../lib/data'
+import { fundsOf, type Transaction, useCategories, useDayFlex, useWalletTransactions, useWallets } from '../../lib/data'
 import { directionFor, type Mode, periodOf, shiftAnchor } from '../../lib/period'
 import { formatDay, formatVnd } from '../../lib/format'
 import { useVnDays } from '../../lib/useVnDays'
@@ -32,20 +32,20 @@ export function TransactionsScreen() {
   const { from, to } = periodOf(mode, anchor)
   const txns = useWalletTransactions({ walletId: wallet?.id, from, to })
   const canNext = to <= today
+  // V16 · chi linh hoạt / hạn mức của từng ngày (mọi ví) — khớp số ở Trang chủ và Kế hoạch
+  const dayFlex = useDayFlex({ from, to })
 
   const { groups, totalOut, totalIn } = useMemo(() => {
     let totalOut = 0
     let totalIn = 0
-    const map = new Map<string, { label: string; out: number; items: Transaction[] }>()
+    const map = new Map<string, { day: string; label: string; items: Transaction[] }>()
     for (const t of txns.data ?? []) {
       const d = vnDate(new Date(t.occurredAt))
       const label = d === today ? 'Hôm nay' : d === yesterday ? 'Hôm qua' : formatDay(t.occurredAt)
-      const g = map.get(d) ?? { label, out: 0, items: [] }
+      const g = map.get(d) ?? { day: d, label, items: [] }
       const dir = directionFor(t, wallet?.id)
-      if (dir === 'out') {
-        g.out += t.amount
-        totalOut += t.amount
-      } else if (dir === 'in') totalIn += t.amount
+      if (dir === 'out') totalOut += t.amount
+      else if (dir === 'in') totalIn += t.amount
       g.items.push(t)
       map.set(d, g)
     }
@@ -152,11 +152,18 @@ export function TransactionsScreen() {
         <section key={g.label} className="card p-3">
           <div className="flex items-baseline justify-between px-2 pb-1">
             <h2 className="font-extrabold">{g.label}</h2>
-            {g.out > 0 && <span className="num text-sm font-bold text-ink-500">−{formatVnd(g.out)}</span>}
+            {dayFlex && <DayFlex spent={dayFlex.flex[g.day] ?? 0} limit={dayFlex.limits[g.day]} />}
           </div>
           <ul>
             {g.items.map((t) => (
-              <TransactionRow key={t.id} txn={t} categories={cats} direction={directionFor(t, wallet?.id)} onClick={() => setEditing(t)} />
+              <TransactionRow
+                key={t.id}
+                txn={t}
+                categories={cats}
+                direction={directionFor(t, wallet?.id)}
+                fixed={!!t.categoryId && !!dayFlex?.fixed.has(t.categoryId)}
+                onClick={() => setEditing(t)}
+              />
             ))}
           </ul>
         </section>
@@ -166,5 +173,15 @@ export function TransactionsScreen() {
 
       <EditTransactionSheet txn={editing} categories={cats} onClose={() => setEditing(null)} />
     </div>
+  )
+}
+
+/** Chi linh hoạt cả ngày (mọi ví) / hạn mức ngày đó */
+function DayFlex(props: { spent: number; limit: number | undefined }) {
+  return (
+    <span className="num text-sm font-bold text-ink-500" title="Chi linh hoạt / hạn mức ngày">
+      <span>{formatVnd(props.spent)}</span>
+      {props.limit !== undefined && <span className="font-semibold text-ink-400"> / {formatVnd(props.limit)}</span>}
+    </span>
   )
 }
