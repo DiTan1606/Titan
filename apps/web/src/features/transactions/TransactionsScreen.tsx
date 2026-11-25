@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Landmark, PiggyBank, Target, Wallet } from '
 import { useMemo, useState } from 'react'
 import { EmptyState } from '../../components/EmptyState'
 import { TransactionRow } from '../../components/TransactionRow'
-import { fundsOf, type Transaction, useCategories, useDayFlex, useWalletsTransactions, useWallets } from '../../lib/data'
+import { type Category, fundsOf, type Transaction, useCategories, useDayFlex, useWalletsTransactions, useWallets } from '../../lib/data'
 import { directionFor, type Mode, periodOf, shiftAnchor } from '../../lib/period'
 import { formatDay, formatVnd } from '../../lib/format'
 import { useVnDays } from '../../lib/useVnDays'
@@ -26,6 +26,9 @@ export function TransactionsScreen() {
   const [mode, setMode] = useState<Mode>('month')
   const [anchor, setAnchor] = useState(today)
   const [editing, setEditing] = useState<Transaction | null>(null)
+  // V16 · Lọc theo Thu / Chi, rồi theo danh mục (danh mục lớn gồm cả danh mục chi tiết bên trong)
+  const [kind, setKind] = useState<'all' | 'expense' | 'income'>('all')
+  const [catId, setCatId] = useState<string | null>(null)
   const cats = useMemo(() => categories.data ?? [], [categories.data])
 
   const bank = wallets.data?.find((w) => w.kind === 'bank')
@@ -51,13 +54,27 @@ export function TransactionsScreen() {
   // V16 · chi linh hoạt / hạn mức của từng ngày (mọi ví) — khớp số ở Trang chủ và Kế hoạch
   const dayFlex = useDayFlex({ from, to })
 
-  const { groups, totalOut, totalIn } = useMemo(() => {
+  const { groups, totalOut, totalIn, filtered, count } = useMemo(() => {
     // tổng Tiền ra / Tiền vào chỉ tính VCB + tiền mặt; chuyển qua lại giữa hai ví không tính
     const mine = new Set([bank?.id, cash?.id].filter(Boolean))
     let totalOut = 0
     let totalIn = 0
     const map = new Map<string, { day: string; label: string; by: Map<string, Transaction[]> }>()
+    const parentOf = new Map(cats.map((c) => [c.id, c.parentId]))
+    const match = (t: Transaction) => {
+      if (kind === 'expense' && t.type !== 'expense' && t.type !== 'borrow') return false
+      if (kind === 'income' && t.type !== 'income') return false
+      if (catId && t.categoryId !== catId && parentOf.get(t.categoryId ?? '') !== catId) return false
+      return true
+    }
+    let filtered = 0
+    let count = 0
     for (const t of txns.data ?? []) {
+      if (kind !== 'all' && !match(t)) continue
+      if (kind !== 'all') {
+        filtered += t.amount
+        count++
+      }
       const d = vnDate(new Date(t.occurredAt))
       const label = d === today ? 'Hôm nay' : d === yesterday ? 'Hôm qua' : formatDay(t.occurredAt)
       const g = map.get(d) ?? { day: d, label, by: new Map<string, Transaction[]>() }
@@ -76,8 +93,8 @@ export function TransactionsScreen() {
       }
       map.set(d, g)
     }
-    return { groups: [...map.values()], totalOut, totalIn }
-  }, [txns.data, today, yesterday, bank, cash, sections])
+    return { groups: [...map.values()], totalOut, totalIn, filtered, count }
+  }, [txns.data, today, yesterday, bank, cash, sections, kind, catId, cats])
 
   const [y, m, d] = anchor.split('-').map(Number)
   const periodLabel = mode === 'year' ? `Năm ${y}` : mode === 'month' ? `Tháng ${m}/${y}` : anchor === today ? 'Hôm nay' : `${d}/${m}/${y}`
@@ -128,16 +145,30 @@ export function TransactionsScreen() {
             <ChevronRight size={20} />
           </button>
         </div>
-        <div className="grid grid-cols-2 gap-2 text-center">
-          <p className="rounded-xl bg-ink-50 py-1.5">
-            <span className="block text-xs font-bold text-ink-500">Tiền ra</span>
-            <span className="num font-extrabold">−{formatVnd(totalOut)}</span>
+        <FilterBar kind={kind} catId={catId} categories={cats} onKind={(k) => (setKind(k), setCatId(null))} onCat={setCatId} />
+        {kind === 'all' ? (
+          <div className="grid grid-cols-2 gap-2 text-center">
+            <p className="rounded-xl bg-ink-50 py-1.5">
+              <span className="block text-xs font-bold text-ink-500">Tiền ra</span>
+              <span className="num font-extrabold">−{formatVnd(totalOut)}</span>
+            </p>
+            <p className="rounded-xl bg-brand-50 py-1.5">
+              <span className="block text-xs font-bold text-brand-600">Tiền vào</span>
+              <span className="num font-extrabold text-brand-600">+{formatVnd(totalIn)}</span>
+            </p>
+          </div>
+        ) : (
+          <p className={`flex items-baseline justify-between rounded-xl px-3 py-1.5 ${kind === 'income' ? 'bg-brand-50' : 'bg-ink-50'}`}>
+            <span className={`text-xs font-bold ${kind === 'income' ? 'text-brand-600' : 'text-ink-500'}`}>
+              {kind === 'income' ? 'Tổng thu' : 'Tổng chi'}
+              {catId ? ` · ${cats.find((c) => c.id === catId)?.name ?? ''}` : ''} · {count} giao dịch
+            </span>
+            <span className={`num font-extrabold ${kind === 'income' ? 'text-brand-600' : ''}`}>
+              {kind === 'income' ? '+' : '−'}
+              {formatVnd(filtered)}
+            </span>
           </p>
-          <p className="rounded-xl bg-brand-50 py-1.5">
-            <span className="block text-xs font-bold text-brand-600">Tiền vào</span>
-            <span className="num font-extrabold text-brand-600">+{formatVnd(totalIn)}</span>
-          </p>
-        </div>
+        )}
       </section>
       </div>
 
@@ -196,5 +227,69 @@ function DayFlex(props: { spent: number; limit: number | undefined }) {
       <span>{formatVnd(props.spent)}</span>
       {props.limit !== undefined && <span className="font-semibold text-ink-400"> / {formatVnd(props.limit)}</span>}
     </span>
+  )
+}
+
+/** Lọc Tất cả / Chi / Thu; chọn Chi hoặc Thu thì hiện danh mục lớn để lọc tiếp (chọn rồi thì hiện danh mục chi tiết) */
+function FilterBar(props: {
+  kind: 'all' | 'expense' | 'income'
+  catId: string | null
+  categories: Category[]
+  onKind: (k: 'all' | 'expense' | 'income') => void
+  onCat: (id: string | null) => void
+}) {
+  const { kind, catId, categories } = props
+  const current = categories.find((c) => c.id === catId)
+  const parentId = current ? (current.parentId ?? current.id) : null
+  const parents = categories.filter((c) => c.kind === kind && !c.parentId && !c.hidden)
+  const children = parentId ? categories.filter((c) => c.parentId === parentId && !c.hidden) : []
+  const chip = (active: boolean) =>
+    `shrink-0 rounded-lg border-2 px-2.5 py-1 text-xs font-bold ${active ? 'border-brand-500 bg-brand-400 text-white' : 'border-ink-100 bg-white text-ink-600'}`
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="grid grid-cols-3 gap-1 rounded-xl bg-ink-50 p-0.5">
+        {(
+          [
+            ['all', 'Tất cả'],
+            ['expense', 'Chi'],
+            ['income', 'Thu'],
+          ] as const
+        ).map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            aria-pressed={kind === k}
+            onClick={() => props.onKind(k)}
+            className={`rounded-lg py-1 text-sm font-bold ${kind === k ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500'}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {kind !== 'all' && (
+        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <button type="button" onClick={() => props.onCat(null)} className={chip(!catId)}>
+            Mọi danh mục
+          </button>
+          {parents.map((c) => (
+            <button key={c.id} type="button" onClick={() => props.onCat(parentId === c.id && catId === c.id ? null : c.id)} className={chip(parentId === c.id)}>
+              {c.name}
+            </button>
+          ))}
+        </div>
+      )}
+      {children.length > 0 && (
+        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <button type="button" onClick={() => props.onCat(parentId)} className={chip(catId === parentId)}>
+            Cả {current?.parentId ? categories.find((c) => c.id === parentId)?.name : current?.name}
+          </button>
+          {children.map((c) => (
+            <button key={c.id} type="button" onClick={() => props.onCat(c.id)} className={chip(catId === c.id)}>
+              {c.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
