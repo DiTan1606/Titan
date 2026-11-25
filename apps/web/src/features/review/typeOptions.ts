@@ -59,8 +59,8 @@ export function typeOptions(txn: Transaction, wallets: Wallet[]): TypeOption[] {
       })
     if (txn.type !== 'lend' && txn.type !== 'borrow')
       options.push({
-        label: 'Cho vay / Ứng tiền',
-        hint: 'Trả hộ người khác, ứng tiền cho Hội — tiền sẽ quay về',
+        label: 'Chi hộ / Ứng tiền',
+        hint: 'Trả giúp người khác, cho mượn, ứng tiền — tiền sẽ được gửi lại. Không tính là chi tiêu',
         patch: { type: 'lend', to_wallet_id: null, category_id: null },
       })
   } else {
@@ -89,8 +89,8 @@ export function typeOptions(txn: Transaction, wallets: Wallet[]): TypeOption[] {
           })
     if (txn.type !== 'collect' && receiving)
       options.push({
-        label: 'Thu nợ',
-        hint: 'Người khác trả lại tiền bạn đã trả hộ / cho mượn / ứng',
+        label: 'Nhận lại tiền đã ứng',
+        hint: 'Người khác gửi lại tiền bạn đã chi hộ, cho mượn, ứng. Không tính là thu nhập',
         patch: { type: 'collect', wallet_id: receiving.id, to_wallet_id: null, category_id: null },
       })
   }

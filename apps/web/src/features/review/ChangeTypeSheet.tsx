@@ -22,7 +22,7 @@ function optionIcon(patch: Record<string, unknown>, label: string): { Icon: Luci
   }
 }
 
-/** BRD P4 · Vuốt lên / "Đổi loại": chuyển nội bộ, trả nợ, thu nợ, cho vay — hoặc đổi ngược về thu chi */
+/** BRD P4 · Vuốt lên / "Đổi loại": chuyển nội bộ, trả nợ, chi hộ / ứng tiền, nhận lại tiền đã ứng — hoặc đổi ngược về thu chi */
 export function ChangeTypeSheet(props: {
   txn: Transaction | null
   wallets: Wallet[]

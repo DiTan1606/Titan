@@ -171,7 +171,7 @@ export function MonthCard(props: { month: string; today: string; result: PlanRes
             <Row label="Tiết kiệm & quỹ đã chuyển" value={-a.savingsNet} />
             <Row label="Chi linh hoạt" value={-a.flexSpent} />
             {a.adjust !== 0 && <Row label="Điều chỉnh số dư" value={a.adjust} />}
-            {Math.abs(a.other) >= 1000 && <Row label="Khác (cho mượn, trả nợ, chuyển đi…)" value={a.other} />}
+            {Math.abs(a.other) >= 1000 && <Row label="Khác (chi hộ, nhận lại, trả nợ, chuyển đi…)" value={a.other} />}
             <Row label="Số dư phải có" value={a.balance} strong />
           </dl>
           <p className="mt-1 text-xs font-semibold text-ink-500">

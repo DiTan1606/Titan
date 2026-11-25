@@ -16,9 +16,9 @@ const SIGN: Record<TxnType, '+' | '−' | ''> = {
 const TYPE_LABEL: Partial<Record<TxnType, string>> = {
   transfer: 'Chuyển nội bộ',
   borrow: 'Được trả hộ',
-  lend: 'Cho vay / ứng',
+  lend: 'Chi hộ / Ứng tiền',
   repay: 'Trả nợ',
-  collect: 'Thu nợ',
+  collect: 'Nhận lại tiền đã ứng',
 }
 
 export function TransactionRow({

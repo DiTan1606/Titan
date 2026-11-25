@@ -126,11 +126,11 @@ function EditForm(props: { txn: Transaction; categories: Category[]; onClose: ()
         : txn.type === 'borrow'
           ? 'Được trả hộ'
           : txn.type === 'lend'
-            ? 'Cho vay'
+            ? 'Chi hộ / Ứng tiền'
             : txn.type === 'repay'
               ? 'Trả nợ'
               : txn.type === 'collect'
-                ? 'Thu nợ'
+                ? 'Nhận lại tiền đã ứng'
                 : 'Tiền ra'
   const canChangeType = !!wallets.data && typeOptions(txn, wallets.data).length > 0
 
@@ -230,7 +230,7 @@ function EditForm(props: { txn: Transaction; categories: Category[]; onClose: ()
           </span>
           <span className="min-w-0 flex-1">
             <span className="block font-extrabold">Đổi loại giao dịch</span>
-            <span className="block text-sm text-ink-500">Chuyển khoản, bỏ vào quỹ, trả nợ, cho vay…</span>
+            <span className="block text-sm text-ink-500">Chuyển khoản, bỏ vào quỹ, chi hộ, trả nợ…</span>
           </span>
           <ChevronRight size={20} className="text-ink-300" />
         </button>
