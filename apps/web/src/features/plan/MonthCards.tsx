@@ -10,6 +10,8 @@ import { Button } from '../../ui/Button'
 import { CategoryIcon } from '../../ui/CategoryIcon'
 import { useToast } from '../../ui/toast-context'
 import { FundSheet } from '../funds/FundSheets'
+import { MoneyInput } from '../../components/MoneyInput'
+import { Sheet } from '../../ui/Sheet'
 
 /** Tên các nguồn chưa về, hẹn đúng ngày `day` */
 const waitingNames = (a: MonthActual, day: string) =>
@@ -32,6 +34,7 @@ export function MonthCard(props: { month: string; today: string; result: PlanRes
   const { actual: a, result: r, month, today } = props
   const wallets = useWallets()
   const [ledger, setLedger] = useState(false)
+  const [splitting, setSplitting] = useState(false)
   const bank = wallets.data?.find((w) => w.kind === 'bank')?.balance ?? 0
   const cash = wallets.data?.find((w) => w.kind === 'cash')?.balance ?? 0
   const fromStart = a.startDay > month
@@ -143,6 +146,11 @@ export function MonthCard(props: { month: string; today: string; result: PlanRes
             Bây giờ {k(a.flexibleNow)} để tiêu ({changes.join(', ')})
           </p>
         )}
+        {a.extra > 0 && (
+          <button type="button" onClick={() => setSplitting(true)} className="mt-1 text-xs font-bold text-brand-600 underline">
+            Tiền dư {k(a.extra)}: tiêu tháng này {k(a.changes.extra)}, để dành {k(Math.max(0, a.unallocated))}. Chia lại
+          </button>
+        )}
         <div className="mt-2 flex flex-col gap-2.5 text-sm">
           <Compare label="Nguồn thu" hint="đã nhận" value={a.received + a.unexpected} max={a.expected.income} good />
           <Compare label="Khoản cố định" hint="đã trả" value={a.fixedPaid} max={a.expected.fixed} />
@@ -150,6 +158,8 @@ export function MonthCard(props: { month: string; today: string; result: PlanRes
           <Compare label="Chi linh hoạt" hint="đã chi" value={a.flexSpent} max={a.flexibleNow} />
         </div>
       </div>
+
+      <ExtraSplitSheet open={splitting} month={month} actual={a} onClose={() => setSplitting(false)} />
 
       {/* 4 · Đối soát số dư */}
       <button
@@ -289,6 +299,7 @@ export function ExtraCard(props: { month: string; actual: MonthActual }) {
   const qc = useQueryClient()
   const toast = useToast()
   const [saving, setSaving] = useState(false)
+  const [splitting, setSplitting] = useState(false)
   const piggy = fundsOf(wallets.data).find((f) => f.isSavings && f.accountSuffix)
   if (a.extraToAsk <= 0) return null
   const amount = a.extraToAsk
@@ -296,7 +307,9 @@ export function ExtraCard(props: { month: string; actual: MonthActual }) {
   async function choose(kind: 'flex' | 'keep') {
     try {
       await updateMonthPlan(props.month, (row) =>
-        kind === 'flex' ? { extra_to_flex: row.extra_to_flex + amount } : { extra_kept: row.extra_kept + amount },
+        kind === 'flex'
+          ? { extra_to_flex: Math.min(row.extra_to_flex, a.changes.extra) + amount }
+          : { extra_kept: Math.min(row.extra_kept, Math.max(0, a.unallocated - amount)) + amount },
       )
       await qc.invalidateQueries({ queryKey: ['plan'] })
       toast(kind === 'flex' ? `Đã đưa ${formatVnd(amount)} vào tiêu tháng này` : `Giữ ${formatVnd(amount)} cho tháng sau`, { tone: 'success' })
@@ -328,9 +341,86 @@ export function ExtraCard(props: { month: string; actual: MonthActual }) {
         <Button variant="ghost" full caps={false} onClick={() => choose('keep')}>
           Để dành cho tháng sau
         </Button>
+        <Button variant="ghost" full caps={false} onClick={() => setSplitting(true)}>
+          Chia một phần tiêu, một phần để dành…
+        </Button>
       </div>
       <FundSheet fund={saving && piggy ? piggy : null} mode="deposit" onClose={() => setSaving(false)} />
+      <ExtraSplitSheet open={splitting} month={props.month} actual={a} onClose={() => setSplitting(false)} />
     </section>
+  )
+}
+
+/**
+ * V16 · Chia lại tiền dư: bao nhiêu đưa vào tiêu tháng này, phần còn lại để dành cho tháng sau.
+ * Sửa được bất cứ lúc nào (lỡ bấm "Đưa vào tiêu" thì vào đây kéo về 0).
+ */
+export function ExtraSplitSheet(props: { open: boolean; month: string; actual: MonthActual; onClose: () => void }) {
+  return (
+    <Sheet open={props.open} onClose={props.onClose} title="Chia tiền dư">
+      {props.open && <ExtraSplitForm {...props} />}
+    </Sheet>
+  )
+}
+
+function ExtraSplitForm(props: { month: string; actual: MonthActual; onClose: () => void }) {
+  const { actual: a } = props
+  const qc = useQueryClient()
+  const toast = useToast()
+  const toFlexNow = a.changes.extra
+  // phần tiền dư đã cất vào tiết kiệm / quỹ (chuyển vượt kế hoạch tiết kiệm)
+  const saved = Math.max(0, a.extra - toFlexNow - a.unallocated)
+  const free = Math.max(0, a.extra - saved)
+  const [spend, setSpend] = useState<number | null>(toFlexNow)
+  const value = Math.min(spend ?? 0, free)
+  const [busy, setBusy] = useState(false)
+
+  async function save() {
+    setBusy(true)
+    try {
+      await updateMonthPlan(props.month, () => ({ extra_to_flex: value, extra_kept: free - value }))
+      await qc.invalidateQueries({ queryKey: ['plan'] })
+      toast(`Tiêu tháng này ${formatVnd(value)}, để dành ${formatVnd(free - value)}`, { tone: 'success' })
+      props.onClose()
+    } catch (e) {
+      toast((e as Error).message, { tone: 'error' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="card p-4 text-sm">
+        <Row label="Tiền dư tháng này" value={a.extra} />
+        {saved > 0 && <Row label="Đã cất vào tiết kiệm / quỹ" value={-saved} />}
+        <Row label="Còn để chia" value={free} strong />
+        <p className="mt-2 text-xs text-ink-500">Tiền dư = thu vượt dự kiến của các nguồn thu + thu ngoài dự kiến.</p>
+      </div>
+      <div className="flex flex-col gap-2">
+        <p className="text-sm font-extrabold text-ink-600">Đưa vào tiêu tháng này</p>
+        <MoneyInput value={spend} onChange={setSpend} />
+        <div className="flex flex-wrap gap-2">
+          {[0, Math.round(free / 2 / 1000) * 1000, free].map((v, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setSpend(v)}
+              className="rounded-xl border-2 border-ink-200 bg-white px-3 py-1.5 text-sm font-bold text-ink-600"
+            >
+              {i === 0 ? 'Không tiêu' : i === 1 ? 'Một nửa' : 'Tiêu hết'}
+            </button>
+          ))}
+        </div>
+        {(spend ?? 0) > free && <p className="text-xs font-semibold text-attn-600">Tối đa {formatVnd(free)}</p>}
+      </div>
+      <div className="rounded-2xl bg-brand-50 p-3 text-sm font-semibold text-brand-700">
+        Để dành cho tháng sau: <b className="num">{formatVnd(free - value)}</b>. Phần này không tính để tiêu, cuối tháng tự thành dư tháng sau.
+      </div>
+      <Button variant="primary" full disabled={busy} onClick={save}>
+        {busy ? 'Đang lưu…' : 'Lưu'}
+      </Button>
+    </div>
   )
 }
 
